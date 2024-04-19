@@ -1,0 +1,64 @@
+<script>
+    // spinner to indicate page is loading
+    document.addEventListener('DOMContentLoaded', function () {
+        var loadingSpinner = document.getElementById('loadingSpinner');
+
+        // Show spinner on page load
+        window.addEventListener('load', function () {
+            loadingSpinner.classList.add('visually-hidden');
+        });
+
+        // Show spinner when navigating away (e.g., clicking a link)
+        window.addEventListener('beforeunload', function () {
+            loadingSpinner.classList.remove('visually-hidden');
+        });
+    });
+</script>  
+
+<script defer>
+    // banner layout toggler
+    var toggleLink = document.getElementById('toggleLink');
+    toggleLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        var searchParams = new URLSearchParams(window.location.search);
+        var defaultLayout = "vertical";
+        var currentLayout = searchParams.get('layout')
+        var selectedLayout;
+        if (!currentLayout || currentLayout === 'vertical') {
+            // Update the href attribute with the modified search string as the target Icon
+            searchParams.set("layout", 'horizontal');
+            toggleLink.href = window.location.pathname + "?" + searchParams.toString();
+            window.location.href = toggleLink.href;  // Navigate to the modified URL
+        } else {
+            // Update the href attribute with the modified search string as the target Icon
+            searchParams.set("layout", 'vertical');
+            toggleLink.href = window.location.pathname + "?" + searchParams.toString();
+            window.location.href = toggleLink.href;  // Navigate to the modified URL
+        }
+    });
+    // banner theme toggler
+    var link = document.getElementById("enable-dark-theme")
+    link.addEventListener("click", function (event) {
+        event.preventDefault(); // Prevent the link from navigating
+        // Get the current search string parameters
+        var searchParams = new URLSearchParams(window.location.search);
+        // Modify or add the desired parameter
+        searchParams.set("theme", "dark");
+        // Update the href attribute with the modified search string
+        link.href = window.location.pathname + "?" + searchParams.toString();
+        // Navigate to the modified URL
+        window.location.href = link.href;
+    });
+    var link = document.getElementById("enable-light-theme")
+    link.addEventListener("click", function (event) {
+        event.preventDefault(); // Prevent the link from navigating
+        // Get the current search string parameters
+        var searchParams = new URLSearchParams(window.location.search);
+        // Modify or add the desired parameter
+        searchParams.set("theme", "light");
+        // Update the href attribute with the modified search string
+        link.href = window.location.pathname + "?" + searchParams.toString();
+        // Navigate to the modified URL
+        window.location.href = link.href;
+    });   
+</script>

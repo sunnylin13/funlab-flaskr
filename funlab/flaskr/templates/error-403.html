@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+* Tabler - Premium and Open Source dashboard template with responsive and high quality UI.
+* @version 1.0.0-beta19
+* @link https://tabler.io
+* Copyright 2018-2023 The Tabler Authors
+* Copyright 2018-2023 codecalm.net Paweł Kuna
+* Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
+-->
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ config.TITLE }} - {{ self._TemplateReference__context.name }} {% endblock title %}
+<!-- Specific Page CSS goes HERE  -->
+{% block stylesheets %}
+<style>
+    @import url('https://rsms.me/inter/inter.css');
+
+    :root {
+        --tblr-font-sans-serif: 'Inter Var', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+    }
+
+    body {
+        font-feature-settings: "cv03", "cv04", "cv11";
+    }
+</style>
+{% endblock stylesheets %}
+<!-- Page body -->
+{% block page_body %}
+<div class="page page-center">
+  <div class="container-tight py-4">
+    <div class="empty">
+      <div class="empty-header">403</div>
+      <p class="empty-title">Oops… Access <span class="fw-bolder text-primary">denied</span></p>
+      <p class="empty-subtitle text-muted">
+        Please contact support or authenticate
+      </p>
+      <p>
+        {% if msg %}
+        Reason: <span class="text-danger">{{ msg | safe }}</span>
+        {% endif %}
+      </p>
+      <div class="empty-action">
+        {% if msg=='No Login manager plugin is installled.' %}
+        <a href="/tablerdemo" class="btn btn-outline">
+          <img src="{{ config.APP_LOGO }}" height="36"
+              alt="{{ config.APP_NAME }}" class="navbar-brand-image">
+          <div class="ms-3">Show me Tabler Demo </div>
+        </a>
+        {% else %}
+        <a href="{{ url_for('root_bp.index')}}" class="btn btn-primary">
+          <!-- Download SVG icon from http://tabler-icons.io/i/arrow-left -->
+          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24"
+            stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+            <path d="M5 12l14 0" />
+            <path d="M5 12l6 6" />
+            <path d="M5 12l6 -6" />
+          </svg>
+          Take me login.
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock page_body %}

@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+* Tabler - Premium and Open Source dashboard template with responsive and high quality UI.
+* @version 1.0.0-beta20
+* @link https://tabler.io
+* Copyright 2018-2023 The Tabler Authors
+* Copyright 2018-2023 codecalm.net Paweł Kuna
+* Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
+-->
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ config.TITLE }} - {{ self._TemplateReference__context.name }} {% endblock title %}
+<!-- Specific Page CSS goes HERE  -->
+{% block stylesheets %}
+<style>
+    @import url('https://rsms.me/inter/inter.css');
+
+    :root {
+        --tblr-font-sans-serif: 'Inter Var', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+    }
+
+    body {
+        font-feature-settings: "cv03", "cv04", "cv11";
+    }
+</style>
+{% endblock stylesheets %}
+{% block page_header %}
+<!-- Page header -->
+<div class="page-header d-print-none">
+    <div class="container-xl">
+        <div class="row g-2 align-items-center">
+            <div class="col">
+                <!-- Page pre-title -->
+                <div class="page-pretitle">
+                    {{config.APP_NAME}}
+                </div>
+                <div class="page-title">
+                    Configuration
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_header %}
+<!-- Page body -->
+{% block page_body %}
+<div class="container-xl d-flex flex-column justify-content-center">
+    <div class="container text-start ">
+        <div class="empty-img"><img src="./static/illustrations/undraw_bug_fixing_oc7a.svg" height="128" alt="">
+        </div>
+        <div>
+            {% macro render_value(value) %}
+            {% if value is mapping %}
+            <ul>
+                {% for key, val in value.items() %}
+                <li><strong>{{ key }}</strong>: {{ render_value(val) }}</li>
+                {% endfor %}
+            </ul>
+            {% elif value is iterable and value is not string %}
+            <ul>
+                {% for val in value %}
+                <li>{{ render_value(val) }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            {{ value }}
+            {% endif %}
+            {% endmacro %}
+            <h3>Flask Configuration:</h3>
+            {{ render_value(app_conf) }}
+
+            <h3>My Configuration:</h3>
+            {% for key, value in all_conf.items() %}
+            <h3>{{ key }}</h3>
+            {{ render_value(value) }}
+            {% endfor %}
+
+        </div>
+    </div>
+</div>
+{% endblock page_body %}

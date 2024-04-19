@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "funlab-flaskr"
+version = "0.3.6"
+license = "MIT"
+description = "Funlab - A pluggable flask application framework."
+authors = ["sunny <013.lin@gmail.com>"]
+readme = "README.md"
+# repository = "https://github.com/python-poetry/poetry"
+# documentation = "https://python-poetry.org/docs/"
+packages = [{include = "funlab"}]
+exclude = ["**/*.jpg", "**/*.png"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+flask = "^3.0.0"
+flask-login = "^0.6.3"
+# waitress = "^2.1.2"  # WSGI service, add only when use it
+# gunicorn = "^21.2.0"  # WSGI service, add only when use it
+# gevent = "^23.9.1"  # add when add gunicorn
+funlab-libs = "^0.3.6"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

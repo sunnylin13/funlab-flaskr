@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+* Tabler - Premium and Open Source dashboard template with responsive and high quality UI.
+* @version 1.0.0-beta19
+* @link https://tabler.io
+* Copyright 2018-2023 The Tabler Authors
+* Copyright 2018-2023 codecalm.net Paweł Kuna
+* Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge"/>
+    <title>{{ config.TITLE }}</title>
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="120x120" href="/static/favicon/home-stats.svg"/>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/home-stats.svg"/>
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/home-stats.svg"/>
+    <link rel="manifest" href="/static/favicon/site.webmanifest"/>
+    <link rel="mask-icon" href="/static/favicon/safari-pinned-tab.svg" color="#ffffff"/>
+    <!-- CSS files -->
+    <link href="/static/dist/css/tabler.min.css?1692870487" rel="stylesheet"/>
+    <link href="/static/dist/css/tabler-flags.min.css?1692870487" rel="stylesheet"/>
+    <link href="/static/dist/css/tabler-payments.min.css?1692870487" rel="stylesheet"/>
+    <link href="/static/dist/css/tabler-vendors.min.css?1692870487" rel="stylesheet"/>
+    <link href="/static/dist/css/demo.min.css?1692870487" rel="stylesheet"/>
+    <style>
+      @import url('https://rsms.me/inter/inter.css');
+      :root {
+      	--tblr-font-sans-serif: 'Inter Var', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+      }
+      body {
+      	font-feature-settings: "cv03", "cv04", "cv11";
+      }
+    </style>
+  </head>
+  <body >
+    <script src="/static/dist/js/demo-theme.min.js?1692870487"></script>
+  <div class="page">
+    <div class="page-wrapper">
+
+      <!-- Page header -->
+      <div class="page-header d-print-none">
+        {% block page_header %}{% endblock page_header %}
+      </div>
+
+      <!-- Page body -->
+      <div class="page-body">
+        {% block page_body %}{% endblock page_body %}
+      </div>
+    </div>
+  </div>
+  <!-- Libs JS -->
+  {% include 'includes/password_scripts.html' %}
+  <!-- End Libs JS  -->
+<!-- Specific Page JS goes HERE  -->
+{% block javascripts %}
+{% endblock javascripts %}
+</body>
+
+</html>

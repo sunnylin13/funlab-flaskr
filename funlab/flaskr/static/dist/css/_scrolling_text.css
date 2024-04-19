@@ -1,0 +1,57 @@
+/* for banner.html scrolling text flash message CSS
+ref : https://blog.hubspot.com/website/scrolling-text-css
+*/
+.flex-container {
+    display: d-flex;          /* Enables Flexbox */
+    justify-content: space-between;  /* Space the items evenly */
+}
+
+#scroll-container {
+    /* border: 1px solid black; */
+    border-radius: 5px;
+    overflow-x: hidden;         /*auto Hide horizontal overflow */
+    overflow-y: hidden;         /* Hide horizontal overflow */
+    white-space: nowrap;         /* Prevent wrapping of content */
+    /*max-width: 90%;             Constrain width to screen width */
+    align-items: center;
+    display: inline-block;
+    
+}
+
+#scroll-text {
+    display: inline-block;  /* Display span elements in-line */
+    align-items: center;
+    /* animation properties */
+    -moz-transform: translateX(100%);
+    -webkit-transform: translateX(100%);
+    transform: translateX(100%);
+    
+    -moz-animation: my-animation 30s linear infinite;
+    -webkit-animation: my-animation 30s linear infinite;
+    animation: my-animation 30s linear infinite;
+}
+
+/* for Firefox */
+@-moz-keyframes my-animation {
+    from { -moz-transform: translateX(100%); }
+    to { -moz-transform: translateX(-100%); }
+}
+
+/* for Chrome */
+@-webkit-keyframes my-animation {
+    from { -webkit-transform: translateX(100%); }
+    to { -webkit-transform: translateX(-100%); }
+}
+
+@keyframes my-animation {
+    from {
+    -moz-transform: translateX(100%);
+    -webkit-transform: translateX(100%);
+    transform: translateX(100%);
+    }
+    to {
+    -moz-transform: translateX(-100%);
+    -webkit-transform: translateX(-100%);
+    transform: translateX(-100%);
+    }
+}

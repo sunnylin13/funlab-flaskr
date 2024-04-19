@@ -1,0 +1,51 @@
+<!doctype html>
+<!--
+* Tabler - Premium and Open Source dashboard template with responsive and high quality UI.
+* @version 1.0.0-beta20
+* @link https://tabler.io
+* Copyright 2018-2023 The Tabler Authors
+* Copyright 2018-2023 codecalm.net Paweł Kuna
+* Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
+-->
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ config.TITLE }} - {{ self._TemplateReference__context.name }} {% endblock title %}
+<!-- Specific Page CSS goes HERE  -->
+{% block stylesheets %}
+<style>
+    @import url('https://rsms.me/inter/inter.css');
+
+    :root {
+        --tblr-font-sans-serif: 'Inter Var', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+    }
+
+    body {
+        font-feature-settings: "cv03", "cv04", "cv11";
+    }
+</style>
+{% endblock stylesheets %}
+{% block page_header %}
+<!-- Page header -->
+<div class="container-xl">
+    <div class="row g-2 align-items-center">
+        <div class="col">
+            <!-- Page pre-title -->
+            <div class="page-pretitle">
+                FunLab
+            </div>
+            <h2 class="page-title">
+                About
+            </h2>
+        </div>
+    </div>
+</div>
+{% endblock page_header %}
+<!-- Page body  d-flex flex-column justify-content-center-->
+{% block page_body %}
+<div class="container-xl justify-content-center">
+    <div><img src="./static/funlab_logo.jpg" height="128" alt="">
+        <p >About FunLab</p>
+    </div>
+</div>
+
+{% endblock page_body %}
