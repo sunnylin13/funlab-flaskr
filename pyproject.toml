@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "funlab-flaskr"
-version = "0.3.6"
+version = "0.3.7"
 license = "MIT"
 description = "Funlab - A pluggable flask application framework."
 authors = ["sunny <013.lin@gmail.com>"]

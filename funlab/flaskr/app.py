@@ -1,5 +1,7 @@
 from __future__ import annotations
 import argparse
+from http.client import HTTPException
+import traceback
 
 from flask import (Blueprint, Flask, g, redirect, render_template, url_for)
 from flask_login import current_user, login_required
@@ -59,6 +61,27 @@ class FunlabFlask(_FlaskBase):
                     return redirect(url_for(about_entry))
             else:
                 return render_template('about.html')
+
+        @self.errorhandler(403)
+        def access_deny_error(error):
+            return render_template('error-403.html', msg=str(error)), 403
+
+        @self.errorhandler(404)
+        def not_found_error(error):
+            return render_template('error-404.html', msg=str(error)), 404
+
+        @self.errorhandler(500)
+        def internal_error(error):
+            return render_template('error-500.html', msg=str(error)), 500
+
+        @self.errorhandler(Exception)
+        def handle_unexpected_error(error):
+            if isinstance(error, HTTPException):
+                return error
+            trace_info = traceback.format_exception(error)
+            trace_info = ''.join(trace_info)
+            traceback.print_exception(error)
+            return render_template('error-500.html', msg=str(error), trace_info=trace_info), 500
 
         # Need to call flask's register_blueprint for all route, after route defined
         self.register_blueprint(self.blueprint)

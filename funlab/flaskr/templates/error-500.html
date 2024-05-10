@@ -34,11 +34,12 @@
           <p class="empty-subtitle text-muted">
             We are sorry but our server encountered an internal error
           </p>
-          <p>
-            {% if msg %}
-            Reason: <span class="text-danger">{{ msg | safe }}</span>
-            {% endif %}
-          </p>
+          {% if msg %}
+          <p>Reason: <span class="text-danger">{{ msg | safe }}</span></p>
+          {% endif %}
+          {% if msg %}
+          <p>Exception trace:<br> <span class="text-danger"><pre class="text-start">{{ trace_info}}</pre></span></p>
+          {% endif %}
           <div class="empty-action">
             <a href="./." class="btn btn-primary">
               <!-- Download SVG icon from http://tabler-icons.io/i/arrow-left -->
