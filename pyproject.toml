@@ -2,10 +2,10 @@
 name = "funlab-flaskr"
 version = "0.3.7"
 license = "MIT"
-description = "Funlab - A pluggable flask application framework."
+description = "Funlab - A pluggable flask web application framework and adopt 'tabler' bootstrap UI template."
 authors = ["sunny <013.lin@gmail.com>"]
 readme = "README.md"
-# repository = "https://github.com/python-poetry/poetry"
+repository = "https://github.com/sunnylin13/funlab-flaskr"
 # documentation = "https://python-poetry.org/docs/"
 packages = [{include = "funlab"}]
 exclude = ["**/*.jpg", "**/*.png"]
