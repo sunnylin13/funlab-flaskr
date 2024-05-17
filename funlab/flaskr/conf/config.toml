@@ -8,14 +8,14 @@
     [ENV.DEVELOPMENT]
         DATABASE = '{{DATABASE.DEVELOPMENT}}'
         WSGI = 'flask'  # gunicorn waitress, flask
-        PORT = 5000
+        PORT = 5001
         DEBUG = true
         TESTING = true
         EXPLAIN_TEMPLATE_LOADING = true
     [ENV.TEST]
         DATABASE = '{{DATABASE.TEST}}'
         WSGI = 'waitress'  # gunicorn waitress, flask
-        PORT = 5000
+        PORT = 5001
         DEBUG = true
     # [ENV.PRODUCTION]
     #     DATABASE = '{{DATABASE.TEST}}'

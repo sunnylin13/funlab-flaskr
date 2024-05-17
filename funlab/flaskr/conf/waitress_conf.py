@@ -4,9 +4,9 @@
 import multiprocessing
 # _quiet = False  # for debug information purpose set False
 # _profile = True  # for debug profiling purpose set True
-#
-host = '0.0.0.0'
-port = 5000
+# will use FunlabFlase's config.toml setting
+# host = '0.0.0.0'
+# port = 5000
 # url_scheme = 'https'
 ident = None  # An optional identifier string that can be used to differentiate between multiple instances of Waitress serving the same application.
 

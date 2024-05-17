@@ -1,7 +1,8 @@
 # This configuration file is used by Gunicorn to start your application
 import multiprocessing
 # Gunicorn configuration
-bind = "0.0.0.0:5000"  # IP address and port to bind Gunicorn server
+# will use FunlabFlase's config.toml setting
+# bind = "0.0.0.0:5000"  # IP address and port to bind Gunicorn server
 # Use multiple workers for better concurrency
 workers = multiprocessing.cpu_count() * 2 + 1
 # Set the worker class based on your application's requirements
