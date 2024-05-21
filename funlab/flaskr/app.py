@@ -116,6 +116,11 @@ def start_server(app:Flask):
             raise Exception("If use waitress as WSGI server, please install needed packages: pip install waitress") from e
         kwargs = {name: getattr(waitress_conf, name) for name in dir(waitress_conf) if not name.startswith('__')}
         kwargs.pop('multiprocessing', None)  # dummy for import multiprocessing statement
+        host = config.get('HOST', '0.0.0.0')
+        port = config.get('PORT', 5000)
+        kwargs['host'] = host
+        kwargs['port'] = port
+        app.mylogger.info(f"Start waitress server at {host}:{port}")
         serve(app, **kwargs)
     elif wsgi == 'gunicorn':
         try:
@@ -149,6 +154,10 @@ def start_server(app:Flask):
                 return self.application
         kwargs = {name: getattr(gunicorn_conf, name) for name in dir(gunicorn_conf) if not name.startswith('__')}
         kwargs.pop('multiprocessing', None)  # dummy for import multiprocessing statement
+        host = config.get('HOST', '0.0.0.0')
+        port = config.get('PORT', 5000)
+        kwargs['bind'] = f"{host}:{port}"
+        app.logger.info(f"Start waitress server at {host}:{port}")
         GunicornApplication(app, kwargs).run()
     else:  # development, use flask embeded server
         import logging
