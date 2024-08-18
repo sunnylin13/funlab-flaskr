@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 from http.client import HTTPException
+from pathlib import Path
 import traceback
 
 from flask import (Blueprint, Flask, g, redirect, render_template, url_for)
@@ -14,6 +15,16 @@ from funlab.utils import vars2env
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
+
+    def get_user_data_storage_path(self, folder_name:str)->Path:
+        data_path =  Path(self.static_folder).joinpath('_users').joinpath(folder_name)
+        data_path.mkdir(parents=True, exist_ok=True)
+        return data_path
+
+    def save_user_data(self, folder_name:str, filename:str, data:bytes):
+        data_path = self.get_user_data_storage_path(folder_name)
+        with open(data_path.joinpath(filename), 'wb') as f:
+            f.write(data)
 
     def register_routes(self):
         self.blueprint = Blueprint(
@@ -97,7 +108,7 @@ class FunlabFlask(_FlaskBase):
                         ])
 
 def create_app(configfile, envfile:str=None):
-    app = FunlabFlask(configfile=configfile, envfile=envfile, import_name=__name__, template_folder="")
+    app = FunlabFlask(configfile=configfile, envfile=envfile, import_name=__name__, template_folder="", static_folder="")
     if envfile:
         vars2env.encode_envfile_vars(envfile, key_name=app.config['SECRET_KEY'])
     return app
