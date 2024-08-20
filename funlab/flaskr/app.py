@@ -16,13 +16,13 @@ class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
 
-    def get_user_data_storage_path(self, folder_name:str)->Path:
-        data_path =  Path(self.static_folder).joinpath('_users').joinpath(folder_name)
+    def get_user_data_storage_path(self, username:str)->Path:
+        data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
         data_path.mkdir(parents=True, exist_ok=True)
         return data_path
 
-    def save_user_data(self, folder_name:str, filename:str, data:bytes):
-        data_path = self.get_user_data_storage_path(folder_name)
+    def save_user_data(self, username:str, filename:str, data:bytes):
+        data_path = self.get_user_data_storage_path(username)
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
