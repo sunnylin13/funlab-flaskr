@@ -26,6 +26,12 @@ class FunlabFlask(_FlaskBase):
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
+    def load_user_file(self, username:str, filename:str):
+        data_path = self.get_user_data_storage_path(username)
+        with open(data_path.joinpath(filename), 'r') as f:
+            data = f.read()
+        return data
+
     def register_routes(self):
         self.blueprint = Blueprint(
             'root_bp',
