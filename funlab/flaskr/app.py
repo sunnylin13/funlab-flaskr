@@ -137,7 +137,7 @@ def start_server(app:Flask):
         port = config.get('PORT', 5000)
         kwargs['host'] = host
         kwargs['port'] = port
-        app.logger.info(f"Start Waitress server at {host}:{port}")
+        app.mylogger.info(f"Start Waitress server at {host}:{port}")
         serve(app, **kwargs)
     elif wsgi == 'gunicorn':
         try:
@@ -174,7 +174,7 @@ def start_server(app:Flask):
         host = config.get('HOST', '0.0.0.0')
         port = config.get('PORT', 5000)
         kwargs['bind'] = f"{host}:{port}"
-        app.logger.info(f"Start Gunicorn server at {host}:{port}")
+        app.mylogger.info(f"Start Gunicorn server at {host}:{port}")
         GunicornApplication(app, kwargs).run()
     else:  # development, use flask embeded server
         import logging
