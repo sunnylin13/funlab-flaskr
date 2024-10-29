@@ -6,6 +6,7 @@
 * Copyright 2018-2023 codecalm.net Paweł Kuna
 * Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
 -->
+<script src="{{ url_for('static', filename='sse_handler.js') }}"></script>
 <div class="nav-item dropdown d-none d-md-flex me-3">
     <a href="#" class="nav-link px-0" data-bs-toggle="dropdown" tabindex="-1"
         aria-label="Show notifications">
@@ -128,4 +129,7 @@
             </div>
         </div>
     </div>
+    <script>
+        subscribeToEvent('notifications', 'notifications');
+    </script>
 </div>
