@@ -5,8 +5,39 @@
 * Copyright 2018-2023 The Tabler Authors
 * Copyright 2018-2023 codecalm.net Paweł Kuna
 * Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
--->
+
 <script src="{{ url_for('static', filename='sse_handler.js') }}"></script>
+-->
+<script>
+    function subscribeToEvent(eventType, elementId) {
+        const eventSource = new EventSource(`/sse/${eventType}`);
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const eventDiv = document.createElement('div');
+            eventDiv.classList.add('list-group-item');
+            eventDiv.innerHTML = `
+                <div class="row align-items-center">
+                    <div class="col-auto"><span class="status-dot status-dot-animated bg-red d-block"></span></div>
+                    <div class="col text-truncate">
+                        <a href="#" class="text-body d-block">${data.payload.title}</a>
+                        <div class="d-block text-muted text-truncate mt-n1">
+                            ${data.payload.message}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <a href="#" class="list-group-item-actions">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            `;
+            document.getElementById(elementId).appendChild(eventDiv);
+        };
+    }
+</script>
 <div class="nav-item dropdown d-none d-md-flex me-3">
     <a href="#" class="nav-link px-0" data-bs-toggle="dropdown" tabindex="-1"
         aria-label="Show notifications">
@@ -26,7 +57,7 @@
             <div class="card-header">
                 <h3 class="card-title">Last updates</h3>
             </div>
-            <div class="list-group list-group-flush list-group-hoverable">
+            <div id="notifications" class="list-group list-group-flush list-group-hoverable">
                 <div class="list-group-item">
                     <div class="row align-items-center">
                         <div class="col-auto"><span
