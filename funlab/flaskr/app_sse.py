@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass
+from datetime import time
 from enum import Enum
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -19,24 +20,25 @@ from funlab.core.config import Config
 from funlab.core.appbase import _FlaskBase
 from funlab.utils import vars2env
 
+@dataclass
+class SSEData:
+    event_type: str # 'self.SSEType'  # type: ignore # Forward reference to self.SSEType
+    payload: dict  # You can replace with more specific typing
+
+
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
 
         # Extract event types from the configuration
-        self.sse_types = self.config.get("SSE_TYPE", None)
+        self.sse_types = self.config.get("SSE_TYPE", [])
 
         if self.sse_types:
             # Dynamically create the SSEType enum
-            self.SSEType: EnumMeta = Enum('SSEType', {event_type.upper(): event_type for event_type in self.sse_types})
+            # self.SSEType: EnumMeta = Enum('SSEType', {event_type.upper(): event_type for event_type in self.sse_types})
 
             # Create event queues dynamically based on the SSEType enum
             self.sse_queues = {event_type: Queue() for event_type in self.SSEType}
-
-            @dataclass
-            class SSEData:
-                event_type: 'self.SSEType'  # type: ignore # Forward reference to self.SSEType
-                payload: dict  # You can replace with more specific typing
 
             self.SSEData = SSEData
             self.register_sse_routes()
@@ -130,11 +132,20 @@ class FunlabFlask(_FlaskBase):
         self.register_blueprint(self.blueprint)
 
     def register_sse_routes(self):
+        def consume_events(event_type: str):
+            event_queue = self.sse_queues[event_type]
+            while True:
+                event = event_queue.get()
+                if event is None:  # Exit condition for the thread
+                    break
+                yield f"data: {json.dumps(event.__dict__)}\n\n"
+                time.sleep(1)     
+        
         @self.blueprint.route('/sse/<event_type>')
         @login_required
         def sse(event_type):
             event_type_enum = self.SSEType[event_type.upper()]
-            return Response(self.consume_events(event_type_enum, self.sse_queues[event_type_enum]), content_type='text/event-stream')
+            return Response(consume_events(event_type_enum, self.sse_queues[event_type_enum]), content_type='text/event-stream')
 
         @self.blueprint.route('/sse/publish', methods=['POST'])
         def publish_event():
@@ -143,12 +154,7 @@ class FunlabFlask(_FlaskBase):
             self.sse_queues[event_type].put(event)
             return '', 204
 
-    def consume_events(self, event_type: Enum, event_queue: Queue):
-        while True:
-            event = event_queue.get()
-            if event is None:  # Exit condition for the thread
-                break
-            yield f"data: {json.dumps(event.__dict__)}\n\n"
+
 
     def register_routes_menu(self):
         self.append_usermenu([MenuDivider(),
