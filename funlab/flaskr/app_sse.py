@@ -1,10 +1,18 @@
 from __future__ import annotations
 import argparse
+from dataclasses import dataclass
+import time
+from enum import Enum
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from enum import EnumMeta
 from http.client import HTTPException
+import json
 from pathlib import Path
+from queue import Queue
 import traceback
 
-from flask import (Blueprint, Flask, g, redirect, render_template, url_for)
+from flask import (Blueprint, Flask, Response, g, redirect, render_template, request, url_for)
 from flask_login import current_user, login_required
 from funlab.core.auth import admin_required
 from funlab.core.menu import MenuItem, MenuDivider
@@ -12,9 +20,24 @@ from funlab.core.config import Config
 from funlab.core.appbase import _FlaskBase
 from funlab.utils import vars2env
 
+@dataclass
+class SSEData:
+    event_type: str
+    user_id: int = 0 # Optional field to specify the target user, 0 for broadcast, same type as user.id defiened in auth.User
+    payload: dict  # You can replace with more specific typing
+
+
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
+
+        # Extract event types from the configuration
+        self.sse_types = self.config.get("SSE_TYPE", [])
+
+        if self.sse_types:
+            # Create event queues dynamically based on the SSEType enum
+            self.sse_queues = {event_type: Queue() for event_type in self.sse_types}
+            self.register_sse_routes()
 
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
@@ -102,6 +125,40 @@ class FunlabFlask(_FlaskBase):
 
         # Need to call flask's register_blueprint for all route, after route defined
         self.register_blueprint(self.blueprint)
+
+    def register_sse_routes(self):
+        self.sse_blueprint = Blueprint(
+            'sse_bp',
+            import_name='funlab.flaskr.sse',
+            static_folder='static',
+            template_folder='templates',
+        )
+        def consume_events(event_type: str):
+            event_queue = self.sse_queues[event_type]
+            while True:
+                event = event_queue.get()
+                if event is None:  # Exit condition for the thread
+                    break
+                yield f"data: {json.dumps(event.__dict__)}\n\n"
+                time.sleep(1)
+
+        @self.sse_blueprint.route('/sse/<event_type>')
+        @login_required
+        def sse(event_type):
+            event_type = event_type
+            return Response(consume_events(event_type), content_type='text/event-stream')
+
+        @self.sse_blueprint.route('/sse/publish', methods=['POST'])
+        def publish_event():
+            event_type = request.json['event_type']
+            payload = request.json['payload']
+            event = SSEData(event_type=event_type, payload=payload)
+            self.sse_queues[event_type].put(event)
+            return '', 204
+
+        # Need to call flask's register_blueprint for all route, after route defined
+        self.register_blueprint(self.sse_blueprint)
+
 
     def register_routes_menu(self):
         self.append_usermenu([MenuDivider(),
