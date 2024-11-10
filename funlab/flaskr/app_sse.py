@@ -1,9 +1,13 @@
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass
+import queue
 import time
 from enum import Enum
 from typing import TYPE_CHECKING
+
+from funlab.flaskr.sse.manager import EventManager
+from funlab.flaskr.sse.models import EventPriority
 if TYPE_CHECKING:
     from enum import EnumMeta
 from http.client import HTTPException
@@ -20,24 +24,10 @@ from funlab.core.config import Config
 from funlab.core.appbase import _FlaskBase
 from funlab.utils import vars2env
 
-@dataclass
-class SSEData:
-    event_type: str
-    user_id: int = 0 # Optional field to specify the target user, 0 for broadcast, same type as user.id defiened in auth.User
-    payload: dict  # You can replace with more specific typing
-
-
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
-
-        # Extract event types from the configuration
-        self.sse_types = self.config.get("SSE_TYPE", [])
-
-        if self.sse_types:
-            # Create event queues dynamically based on the SSEType enum
-            self.sse_queues = {event_type: Queue() for event_type in self.sse_types}
-            self.register_sse_routes()
+        self.event_manager = EventManager(self.dbmgr)
 
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
@@ -102,9 +92,38 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
+        @self.blueprint.route('/events/<int:user_id>')
+        def stream_events(user_id):
+            def event_stream():
+                user_stream = self.event_manager.register_user_stream(user_id)
+                try:
+                    while True:
+                        try:
+                            event = user_stream.get(timeout=10)  # Wait for an event or timeout
+                            yield f"data: {event.to_json()}\n\n"
+                        except queue.Empty:
+                            # Send a heartbeat if no event is received within the timeout
+                            yield f"data: heartbeat\n\n"
+                            time.sleep(1)  # Sleep for a short period to avoid busy-waiting
+                except GeneratorExit:
+                    self.event_manager.unregister_user_stream(user_id, user_stream)
+
+            return Response(event_stream(), content_type='text/event-stream')
+
+        @self.blueprint.route('/create_event', methods=['POST'])
+        def create_event():
+            payload = self.PayloadBase(data="example data")
+            self.event_manager.create_event(
+                event_type="example_event",
+                payload=payload,
+                target_userid=1,
+                priority=EventPriority.NORMAL
+            )
+            return "Event created", 201
+
         @self.errorhandler(403)
-        def access_deny_error(error):
-            return render_template('error-403.html', msg=str(error)), 403
+            def access_deny_error(error):
+                return render_template('error-403.html', msg=str(error)), 403
 
         @self.errorhandler(404)
         def not_found_error(error):
