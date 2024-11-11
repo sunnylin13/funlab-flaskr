@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 from contextlib import contextmanager
 
-from .models import EventBase, EventPriority, PayloadBase
+from .models import EventBase, EventEntity, EventPriority, PayloadBase
 import queue
 import threading
 import time
@@ -82,6 +82,10 @@ class EventManager:
     def register_event(cls, event_type: str, event_class: type[EventBase]):
         cls._event_classes[event_type] = event_class
 
+    @property
+    def all_event_queues(self)->list[queue.Queue]:
+        return list(self.user_event_queues.values()).insert(0, self.global_event_queue)
+
     def create_event(self, event_type: str, payload: PayloadBase,
                     target_userid: Optional[int] = None,
                     priority: EventPriority = EventPriority.NORMAL,
@@ -98,35 +102,36 @@ class EventManager:
         self._store_event(event)
         # Add to queue
         try:
-            if event.is_global():
-                self.global_event_queue.put_nowait(event)
-            else:
-                self.user_event_queues[event.get('user_id')].put_nowait(event)
+            self._put_event(event)
         except queue.Full:
             if event.is_global():
                 self.mylogger.error("Global event queue is full")
             else:
                 self.mylogger.error(f"User id={event.target_userid} event queue is full")
             raise RuntimeError("Event system is overloaded")
+        
+    def _put_event(self, event: EventBase):
+        if event.is_global():
+            self.global_event_queue.put_nowait(event)
+        else:
+            self.user_event_queues[event.get('user_id')].put_nowait(event)
 
     def _store_event(self, event: EventBase):
         with self.dbmgr.session_context() as session:
             session.add(event.to_entity())
 
-    @property
-    def all_event_queues(self)->list[queue.Queue]:
-        return list(self.user_event_queues.values()).insert(0, self.global_event_queue)
-
     def _recover_stored_events(self):
         with self.dbmgr.session_context() as session:
-            stmt = select(EventEntity).where(EventEntity.is_expired() == False).order_by(EventEntity.created_at.asc())
+            stmt = select(EventEntity).order_by(EventEntity.created_at.asc())  # .where(EventEntity.is_expired == False)
             unprocessed_events: list[EventEntity] = session.execute(stmt).scalars().all()
-            for event_record in unprocessed_events:
+            for event_entity in unprocessed_events:
                 try:
-                    if event_record.is_global:
-                        self.global_event_queue.put_nowait(event_record.__dict__)
-                    else:
-                        self.user_event_queues[event_record.user_id].put_nowait(event_record.__dict__)
+                    event_class = self._event_classes[event_entity.event_type]
+                    event = event_class().from_entity(event_entity)
+                    if event.is_expired:
+                        session.delete(event_entity)
+                        continue
+                    self._put_event(event)
                 except queue.Full:
                     break
             session.commit()
