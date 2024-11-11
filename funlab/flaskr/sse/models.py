@@ -26,11 +26,19 @@ class EventPriority(Enum):
 
 @dataclass
 class EventBase(_Readable):
+    """ 單一event data class
+        is_read是對每一個另event, 儲存成為 event entity時,
+        若是is_global要取出同event_id 的eventEntity 加入到 read_users
+        若是有target_userid, 則直接儲存成為event entity, read_users只有一筆
+    """
+    id: int = field(init=False)  # 需在存入db時才會有id
     event_type: str
     payload: PayloadBase
     target_userid: int = None
     priority: EventPriority = EventPriority.NORMAL
-    is_read: bool = False
+    is_read: bool = field(init=False, default=False)
+    # if target_userid is None, it is a global event then need to keep track of read users
+    # read_users: list[int] = field(default_factory=list)
     created_at: datetime = datetime.now(timezone.utc)
     expires_at: datetime = None
 
@@ -39,70 +47,6 @@ class EventBase(_Readable):
         return self.target_userid is None
 
     @property
-    def is_expired(self):
-        return self.expires_at and datetime.now(timezone.utc) > self.expires_at
-
-    def to_json(self):
-        return super().to_json()
-
-    def to_entity(self):
-        return EventEntity(
-            event_type=self.event_type,
-            payload=self.payload.to_json(),
-            target_userid=self.target_userid,
-            priority=self.priority,
-            is_read=self.is_read,
-            created_at=self.created_at,
-            expires_at=self.expires_at
-        )
-
-    def from_entity(self, entity: 'EventEntity'):
-        return EventBase(
-            event_type=entity.event_type,
-            payload=PayloadBase.from_jsonstr(entity.payload) if isinstance(self.payload, str) else entity.payload,
-            target_userid=entity.target_userid,
-            priority=entity.priority,
-            is_read=entity.is_read,
-            created_at=entity.created_at,
-            expires_at=entity.expires_at
-        )
-    
-    def sse_format(self):
-        """ Format the event object as a Server-Sent Event. """
-        return f"event: {self.event_type}\ndata: {self.payload.to_json()}\n\n"
-
-@entities_registry.mapped
-@dataclass
-class EventEntity(EventBase):
-    __tablename__ = 'event'
-    __sa_dataclass_metadata_key__ = 'sa'
-
-    id: int = field(init=False, metadata={'sa': Column(Integer, primary_key=True, autoincrement=True)})
-    event_type: str = field(metadata={'sa': Column(String(50), nullable=False)})
-    payload: PayloadBase = field(metadata={'sa': Column(JSON, nullable=False)})
-    target_userid: int = field(default=None, metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=True)})
-    priority: EventPriority = field(default=None, metadata={'sa': Column(SQLEnum(EventPriority), default=EventPriority.NORMAL, nullable=False)})
-    # is_read: bool = field(default=False, metadata={'sa': Column(Boolean, default=False, nullable=False)})
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
-    expires_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
-    # if target_userid is None, it is a global event then need to keep track of read users
-    read_users: list['ReadEventUsers'] = field(default_factory=list, metadata={'sa': relationship('ReadEventUsers', back_populates='event')})
-
-    def post_init(self):
-        self.payload = PayloadBase.from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
-
-    def is_all_read(self, users: list[int]) -> bool:
-        if not self.is_global:
-            return self.target_userid in self.read_users
-        else:
-            read_user_ids = {read_user.user_id for read_user in self.read_users}
-        return all(user_id in read_user_ids for user_id in users)
-
-    @hybrid_property
-    def is_global(self):
-        return self.target_userid is None
-
-    @hybrid_property
     def is_expired(self):
         return self.expires_at and datetime.now(timezone.utc) > self.expires_at
 
@@ -119,6 +63,87 @@ class EventEntity(EventBase):
             local_tz = get_localzone()
             return self.expires_at.astimezone(local_tz)
         return None
+
+    def is_all_read(self, user_ids: list[int]) -> bool:
+        if not self.is_global:
+            return self.target_userid in self.read_users
+        else:
+            return all(user_id in self.read_users for user_id in user_ids)
+
+    def to_json(self):
+        return super().to_json()
+
+    def to_entity(self):
+        if self.is_read or self.is_expired:
+            # 若event已read or expired就不需在轉成entity去儲存, raise exception避免邏輯錯誤
+            raise ValueError("Should create event entity from read or expired event object")
+        return  EventEntity(
+            event_type=self.event_type,
+            payload=self.payload.to_json(),
+            target_userid=self.target_userid,
+            priority=self.priority,
+            read_users=[ReadEventUsers(user_id=self.target_userid)] if (self.target_userid and self.is_read) else [],
+            created_at=self.created_at,
+            expires_at=self.expires_at
+        )
+
+    @classmethod
+    def from_entity(cls, entity: 'EventEntity'):
+        if entity.is_read or entity.is_expired:
+            # 若event entity已read or expired就不再轉成event去發送, raise exception避免邏輯錯誤
+            raise ValueError("Should create event object from read or expired EventEntity")
+        return cls(
+            event_type=entity.event_type,
+            payload=PayloadBase.from_jsonstr(entity.payload) if isinstance(entity.payload, str) else entity.payload,
+            target_userid=entity.target_userid,
+            priority=entity.priority,
+            is_read=False,  # event 一定是未讀的才會被發送
+            created_at=entity.created_at,
+            expires_at=entity.expires_at
+        )
+
+    def sse_format(self):
+        """ Format the event object as a Server-Sent Event. """
+        return f"event: {self.event_type}\ndata: {self.payload.to_json()}\n\n"
+
+@entities_registry.mapped
+@dataclass
+class EventEntity(EventBase):
+    """ SQLAlchemy Entity for EventBase
+
+    """
+    __tablename__ = 'event'
+    __sa_dataclass_metadata_key__ = 'sa'
+
+    id: int = field(init=False, metadata={'sa': Column(Integer, primary_key=True, autoincrement=True)})
+    event_type: str = field(metadata={'sa': Column(String(50), nullable=False)})
+    payload: PayloadBase = field(metadata={'sa': Column(JSON, nullable=False)})
+    target_userid: int = field(default=None, metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=True)})
+    priority: EventPriority = field(default=None, metadata={'sa': Column(SQLEnum(EventPriority), default=EventPriority.NORMAL, nullable=False)})
+    # is_read: bool = field(default=False, metadata={'sa': Column(Boolean, default=False, nullable=False)})
+
+    # if target_userid is None, it is a global event then need to keep track of read users
+    read_users: list['ReadEventUsers'] = field(default_factory=list, metadata={'sa': relationship('ReadEventUsers', back_populates='event')})
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
+    expires_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
+
+    def post_init(self):
+        self.payload = PayloadBase.from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
+
+    def is_all_read(self, user_ids: list[int]) -> bool:
+        read_user_ids = [read_user.user_id for read_user in self.read_users]
+        if not self.is_global:
+            return self.target_userid in read_user_ids
+        else:
+            return all(user_id in read_user_ids for user_id in user_ids)
+
+    @hybrid_property
+    def is_global(self):
+        return self.target_userid is None
+
+    @hybrid_property
+    def is_expired(self):
+        return self.expires_at and datetime.now(timezone.utc) > self.expires_at
 
 @entities_registry.mapped
 @dataclass
@@ -158,4 +183,3 @@ class TaskCompletedEvent(EventBase):
     def __repr__(self):
         return self.__str__()
 
-d

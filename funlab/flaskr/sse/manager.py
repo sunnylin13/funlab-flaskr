@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 from contextlib import contextmanager
 
-from .models import EventBase, EventEntity, EventPriority, PayloadBase
+from .models import EventBase, EventEntity, EventPriority, PayloadBase, ReadEventUsers
 import queue
 import threading
 import time
@@ -89,18 +89,16 @@ class EventManager:
     def create_event(self, event_type: str, payload: PayloadBase,
                     target_userid: Optional[int] = None,
                     priority: EventPriority = EventPriority.NORMAL,
-                    is_read: bool = False,
                     created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None,
                     **kwargs) -> EventBase:
         if event_type not in self._event_classes:
             raise ValueError(f"Unknown event type: {event_type}")
         event_class = self._event_classes[event_type]
         event: EventBase = event_class(event_type=event_type, payload=payload,
-                           target_userid=target_userid, priority=priority, is_read=is_read, created_at=created_at, expires_at=expires_at,
+                           target_userid=target_userid, priority=priority, created_at=created_at, expires_at=expires_at,
                            **kwargs)
         # Store in database
         self._store_event(event)
-        # Add to queue
         try:
             self._put_event(event)
         except queue.Full:
@@ -109,7 +107,7 @@ class EventManager:
             else:
                 self.mylogger.error(f"User id={event.target_userid} event queue is full")
             raise RuntimeError("Event system is overloaded")
-        
+
     def _put_event(self, event: EventBase):
         if event.is_global():
             self.global_event_queue.put_nowait(event)
@@ -118,7 +116,22 @@ class EventManager:
 
     def _store_event(self, event: EventBase):
         with self.dbmgr.session_context() as session:
-            session.add(event.to_entity())
+            # 若是is_global
+            #   if event_id 的eventEntity exist, and is_read, 則加入到 read_users
+            event_entity = event.to_entity()
+            session.add(event_entity)
+            session.commit()
+            event.id = event_entity.id
+
+
+    def _set_event_read(self, event: EventBase, user_id: int):
+        with self.dbmgr.session_context() as session:
+            if event.is_global():
+                event_entity = session.query(EventEntity).filter_by(event_id=event.ev).first()
+                if event_entity and not event_entity.is_read:
+                    event_entity.read_users.append(ReadEventUsers(user_id=user_id))
+            else:
+                event.is_read = True
 
     def _recover_stored_events(self):
         with self.dbmgr.session_context() as session:
@@ -127,7 +140,7 @@ class EventManager:
             for event_entity in unprocessed_events:
                 try:
                     event_class = self._event_classes[event_entity.event_type]
-                    event = event_class().from_entity(event_entity)
+                    event = event_class.from_entity(event_entity)
                     if event.is_expired:
                         session.delete(event_entity)
                         continue
