@@ -4,6 +4,7 @@ from enum import Enum
 from funlab.core import _Readable
 from pydantic import BaseModel
 from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, ForeignKey, Enum as SQLEnum
+from sqlalchemy.orm import relationship
 # all of application's entity, use same registry to declarate
 from funlab.core.appbase import APP_ENTITIES_REGISTRY as entities_registry
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -55,7 +56,18 @@ class EventBase(_Readable):
             expires_at=self.expires_at
         )
 
-    def make_sse(self):
+    def from_entity(self, entity: 'EventEntity'):
+        return EventBase(
+            event_type=entity.event_type,
+            payload=PayloadBase.from_jsonstr(entity.payload) if isinstance(self.payload, str) else entity.payload,
+            target_userid=entity.target_userid,
+            priority=entity.priority,
+            is_read=entity.is_read,
+            created_at=entity.created_at,
+            expires_at=entity.expires_at
+        )
+    
+    def sse_format(self):
         """ Format the event object as a Server-Sent Event. """
         return f"event: {self.event_type}\ndata: {self.payload.to_json()}\n\n"
 
@@ -70,12 +82,21 @@ class EventEntity(EventBase):
     payload: PayloadBase = field(metadata={'sa': Column(JSON, nullable=False)})
     target_userid: int = field(default=None, metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=True)})
     priority: EventPriority = field(default=None, metadata={'sa': Column(SQLEnum(EventPriority), default=EventPriority.NORMAL, nullable=False)})
-    is_read: bool = field(default=False, metadata={'sa': Column(Boolean, default=False, nullable=False)})
+    # is_read: bool = field(default=False, metadata={'sa': Column(Boolean, default=False, nullable=False)})
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
     expires_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
+    # if target_userid is None, it is a global event then need to keep track of read users
+    read_users: list['ReadEventUsers'] = field(default_factory=list, metadata={'sa': relationship('ReadEventUsers', back_populates='event')})
 
     def post_init(self):
-        self.payload = PayloadBase.from_jsonstr(self.payload)  # Convert payload from JSON string to object
+        self.payload = PayloadBase.from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
+
+    def is_all_read(self, users: list[int]) -> bool:
+        if not self.is_global:
+            return self.target_userid in self.read_users
+        else:
+            read_user_ids = {read_user.user_id for read_user in self.read_users}
+        return all(user_id in read_user_ids for user_id in users)
 
     @hybrid_property
     def is_global(self):
@@ -84,25 +105,6 @@ class EventEntity(EventBase):
     @hybrid_property
     def is_expired(self):
         return self.expires_at and datetime.now(timezone.utc) > self.expires_at
-
-    def to_dto(self):  # EventBase, Data transfer object
-        if isinstance(self.payload, str):
-            payload = PayloadBase.from_jsonstr(self.payload)
-        else:
-            payload = self.payload
-
-        return EventBase(
-            event_type=self.event_type,
-            payload=payload,
-            target_userid=self.target_userid,
-            priority=self.priority,
-            is_read=self.is_read,
-            created_at=self.created_at,
-            expires_at=self.expires_at
-        )
-
-    def to_json(self):
-        return self.to_dto().to_json()
 
     @property
     def local_created_at(self):
@@ -117,3 +119,43 @@ class EventEntity(EventBase):
             local_tz = get_localzone()
             return self.expires_at.astimezone(local_tz)
         return None
+
+@entities_registry.mapped
+@dataclass
+class ReadEventUsers:
+    __tablename__ = 'read_event_users'
+    __sa_dataclass_metadata_key__ = 'sa'
+
+    id: int = field(init=False, metadata={'sa': Column(Integer, primary_key=True, autoincrement=True)})
+    event_id: int = field(metadata={'sa': Column(Integer, ForeignKey('event.id'), nullable=False)})
+    user_id: int = field(metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=False)})
+    read_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
+
+    event: EventEntity = field(metadata={'sa': relationship('EventEntity', back_populates='read_users')})
+class TaskCompletedPayload(PayloadBase):
+    task_name: str
+    task_result: str
+    task_start_time: datetime
+    task_end_time: datetime
+
+class TaskCompletedEvent(EventBase):
+    event_type = 'task_completed'
+    payload: TaskCompletedPayload
+
+    def __init__(self, task_name: str, task_result: str, task_start_time: datetime, task_end_time: datetime,
+                 target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, is_read: bool = False,
+                 created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None):
+        self.payload = TaskCompletedPayload(task_name=task_name, task_result=task_result, task_start_time=task_start_time, task_end_time=task_end_time)
+        self.target_userid = target_userid
+        self.priority = priority
+        self.is_read = is_read
+        self.created_at = created_at
+        self.expires_at = expires_at
+
+    def __str__(self):
+        return f"TaskCompletedEvent(task_name={self.payload.task_name}, task_result={self.payload.task_result}, task_start_time={self.payload.task_start_time}, task_end_time={self.payload.task_end_time}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expires_at={self.expires_at})"
+
+    def __repr__(self):
+        return self.__str__()
+
+d
