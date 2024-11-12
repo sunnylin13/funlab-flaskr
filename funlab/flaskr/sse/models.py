@@ -65,12 +65,6 @@ class EventBase(_Readable):
             return self.expires_at.astimezone(local_tz)
         return None
 
-    # def is_all_read(self, user_ids: list[int]) -> bool:
-    #     if not self.is_global:
-    #         return self.target_userid in self.read_users
-    #     else:
-    #         return all(user_id in self.read_users for user_id in user_ids)
-
     def to_json(self):
         return super().to_json()
 
@@ -84,7 +78,7 @@ class EventBase(_Readable):
             payload=self.payload.to_json(),
             target_userid=self.target_userid,
             priority=self.priority,
-            read_users=[ReadUsersEntity(user_id=self.target_userid)] if (self.target_userid and self.is_read) else [],
+            read_users= [],  # event 一定是未讀or未過期的才需被儲存
             created_at=self.created_at,
             expires_at=self.expires_at
         )
@@ -118,7 +112,7 @@ class EventEntity(EventBase):
     __tablename__ = 'event'
     __sa_dataclass_metadata_key__ = 'sa'
 
-    id: int = field(init=False, metadata={'sa': Column(Integer, primary_key=True, autoincrement=True)})
+    id: int = field(init=False, metadata={'sa': Column(Integer(unsigned=True), primary_key=True, autoincrement=True)})
     event_type: str = field(metadata={'sa': Column(String(50), nullable=False)})
     payload: PayloadBase = field(metadata={'sa': Column(JSON, nullable=False)})
     target_userid: int = field(default=None, metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=True)})
@@ -134,12 +128,13 @@ class EventEntity(EventBase):
         self.payload = PayloadBase.from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
 
     def is_users_read(self, user_ids: list[int]) -> bool:
+        """應用於傳入系統所有的user_ids, 若都已讀, 則應自db中刪除此event entity"""
         read_user_ids = [read_user.user_id for read_user in self.read_users]
         if not self.is_global:
             return self.target_userid in read_user_ids
         else:
             return all(user_id in read_user_ids for user_id in user_ids)
-        
+
     def set_event_read(self, event: EventBase):
         if self.id != event.id:
             raise ValueError("Event id not match")
