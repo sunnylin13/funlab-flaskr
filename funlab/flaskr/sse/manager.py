@@ -16,53 +16,65 @@ import time
 from collections import defaultdict
 from typing import Dict, Set
 
+import threading
+import queue
+import uuid
+from collections import defaultdict
+from typing import Dict, Set
+
 class ConnectionManager:
     def __init__(self, max_connections_per_user: int):
         self.max_connections = max_connections_per_user
-        self.user_connections: Dict[int, Set[queue.Queue]] = defaultdict(set)
-        self.users_connect_time: Dict[int, float] = {}
+        self.user_connections: Dict[int, Dict[str, queue.Queue]] = defaultdict(dict)
+        self.users_connect_time: Dict[str, float] = {}
         self._lock = threading.Lock()
 
-    def add_connection(self, user_id: int, stream: queue.Queue) -> bool:
+    def _generate_stream_id(self) -> str:
+        return str(uuid.uuid4())
+
+    def add_connection(self, user_id: int, stream: queue.Queue) -> str:
         with self._lock:
             if len(self.user_connections[user_id]) >= self.max_connections:
                 # Remove oldest connection
-                oldest_connection = min(
+                oldest_stream_id = min(
                     self.user_connections[user_id],
-                    key=lambda s: self.users_connect_time.get(id(s), 0)
+                    key=lambda sid: self.users_connect_time.get(sid, 0)
                 )
-                self.remove_connection(user_id, oldest_connection)
+                self.remove_connection(user_id, oldest_stream_id)
 
-            self.user_connections[user_id].add(stream)
-            self.users_connect_time[id(stream)] = time.time()
-            return True
+            stream_id = self._generate_stream_id()
+            self.user_connections[user_id][stream_id] = stream
+            self.users_connect_time[stream_id] = time.time()
+            return stream_id
 
-    def remove_connection(self, user_id: int, stream: queue.Queue):
+    def remove_connection(self, user_id: int, stream_id: str):
         with self._lock:
-            if stream in self.user_connections[user_id]:
-                self.user_connections[user_id].remove(stream)
-                self.users_connect_time.pop(id(stream), None)
+            if stream_id in self.user_connections[user_id]:
+                del self.user_connections[user_id][stream_id]
+                self.users_connect_time.pop(stream_id, None)
 
             if not self.user_connections[user_id]:
                 del self.user_connections[user_id]
 
-    def get_user_streams(self, user_id: int) -> Set[queue.Queue]:
-        return self.user_connections.get(user_id, set())
+    def get_user_streams(self, user_id: int) -> set[queue.Queue]: # Dict[str, queue.Queue]:
+        return set(self.user_connections.get(user_id, {}).values())
 
-    def get_all_streams(self) -> Set[queue.Queue]:
+    def get_all_streams(self) -> set[queue.Queue]:
         all_streams = set()
         for streams in self.user_connections.values():
-            all_streams.update(streams)
+            all_streams.update(streams.values())
         return all_streams
 
 class EventManager:
     _event_classes: Dict[str, type[EventBase]] = {}
+    # _payload_classes: Dict[str, type[PayloadBase]] = {}
 
     def __init__(self, dbmgr:DbMgr, max_event_queue_size=1000, max_events_per_stream=100):
         self.mylogger = log.get_logger(self.__class__.__name__, level=logging.INFO)
         self.dbmgr:DbMgr = dbmgr
-        self.connection_manager = ConnectionManager(dbmgr)
-        self.metrics = Metrics()
+        self.connection_manager = ConnectionManager(max_connections_per_user=10)
+        # todo: check if needed
+        # self.metrics = Metrics()  
         self.event_queue: queue.Queue = queue.Queue(maxsize=max_event_queue_size)
         self.max_events_per_stream = max_events_per_stream
         self.lock = threading.Lock()
@@ -71,8 +83,9 @@ class EventManager:
         self.distributor_thread = self.start_event_distributor()
 
     @classmethod
-    def register_event(cls, event_type: str, event_class: type[EventBase]):
-        cls._event_classes[event_type] = event_class
+    def register_event(cls, event_type: str, event_class: type[EventBase]): # , payload_class: type[PayloadBase]):
+        cls._event_classes[event_type] = event_class, 
+        # cls._payload_classes[event_type] = payload_class
 
     def create_event(self, event_type: str, payload: PayloadBase,
                     target_userid: Optional[int] = None,
@@ -80,9 +93,11 @@ class EventManager:
                     created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None,
                     **kwargs) -> EventBase:
         if event_type not in self._event_classes:
-            raise ValueError(f"Unknown event type: {event_type}")
+            raise ValueError(f"Not register event class for event type: {event_type}")
+        # if event_type not in self._payload_classes:
+        #     raise ValueError(f"Not register payload type for event type: {event_type}")
         event_class = self._event_classes[event_type]
-        event: EventBase = event_class(event_type=event_type, payload=payload,
+        event = event_class(event_type=event_type, payload=payload,
                            target_userid=target_userid, priority=priority, created_at=created_at, expires_at=expires_at,
                            **kwargs)
         # Store in database
@@ -105,7 +120,7 @@ class EventManager:
                 session.commit()
                 event.id = event_entity.id
 
-    def _set_event_read(self, event: EventBase, read_user_id: int):
+    def set_event_read(self, event: EventBase, read_user_id: int):
         with self.dbmgr.session_context() as session:
             if event_entity:= session.query(EventEntity).filter_by(event_id=event.id).first():
                 if event.is_global() and \
@@ -116,6 +131,8 @@ class EventManager:
                         # self._remove_event_from_queue(event)
                         event.is_read = True
                         session.delete(event_entity)
+                    else:
+                        self.mylogger.error(f"set_event_read for Event {event.id} target_user:{event.target_userid} is not for user {read_user_id}")
 
     def _recover_stored_events(self):
         with self.dbmgr.session_context() as session:
@@ -123,7 +140,7 @@ class EventManager:
             unprocessed_events: list[EventEntity] = session.execute(stmt).scalars().all()
             for event_entity in unprocessed_events:
                 try:
-                    if event_entity.is_expired:
+                    if event_entity.is_expired or event_entity.is_read:
                         session.delete(event_entity)
                         continue
                     event_class = self._event_classes[event_entity.event_type]
@@ -164,8 +181,9 @@ class EventManager:
                 try:
                     while not self.event_queue.empty():
                         event: EventBase = self.event_queue.get(timeout=1)
-                        if not event.is_read:
-                            self._distribute_event(event)
+                        if event.is_read or event.is_expired:
+                            continue
+                        self._distribute_event(event)
                 except queue.Empty:
                     continue
                 except Exception as e:
@@ -175,13 +193,13 @@ class EventManager:
         distributor_thread.start()
         return distributor_thread
 
-    def register_user_stream(self, user_id: int) -> queue.Queue:
+    def register_user_stream(self, user_id: int) -> queue.Queue[EventBase]:
         stream = queue.Queue(maxsize=self.max_events_per_stream)
         if self.connection_manager.add_connection(user_id, stream):
             return stream
         return None
 
-    def unregister_user_stream(self, user_id: int, stream: queue.Queue):
+    def unregister_user_stream(self, user_id: int, stream: queue.Queue[EventBase]):
         self.connection_manager.remove_connection(user_id, stream)
 
 

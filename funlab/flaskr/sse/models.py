@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from funlab.core import _Readable
 from pydantic import BaseModel
-from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, ForeignKey, Enum as SQLEnum
+from sqlalchemy import JSON, Column, DateTime, Integer, String, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 # all of application's entity, use same registry to declarate
 from funlab.core.appbase import APP_ENTITIES_REGISTRY as entities_registry
@@ -38,8 +38,6 @@ class EventBase(_Readable):
     target_userid: int = None
     priority: EventPriority = EventPriority.NORMAL
     is_read: bool = field(init=False, default=False)  # 記錄對各別user該event是否已讀
-    # if target_userid is None, it is a global event then need to keep track of read users
-    # read_users: list[int] = field(default_factory=list)
     created_at: datetime = datetime.now(timezone.utc)
     expires_at: datetime = None
 
@@ -112,15 +110,13 @@ class EventEntity(EventBase):
     __tablename__ = 'event'
     __sa_dataclass_metadata_key__ = 'sa'
 
-    id: int = field(init=False, metadata={'sa': Column(Integer(unsigned=True), primary_key=True, autoincrement=True)})
+    id: int = field(init=False, metadata={'sa': Column(Integer, primary_key=True, autoincrement=True)})
     event_type: str = field(metadata={'sa': Column(String(50), nullable=False)})
     payload: PayloadBase = field(metadata={'sa': Column(JSON, nullable=False)})
     target_userid: int = field(default=None, metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=True)})
     priority: EventPriority = field(default=None, metadata={'sa': Column(SQLEnum(EventPriority), default=EventPriority.NORMAL, nullable=False)})
-    # is_read: bool = field(default=False, metadata={'sa': Column(Boolean, default=False, nullable=False)})
-
     # if target_userid is None, it is a global event then need to keep track of read users
-    read_users: list['ReadUsersEntity'] = field(default_factory=list, metadata={'sa': relationship('ReadUsersEntity', back_populates='event')})
+    read_users: list['ReadUsersEntity'] = field(default_factory=list, metadata={'sa': relationship('ReadUsersEntity')})  # , back_populates='event'
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
     expires_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
 
@@ -134,14 +130,6 @@ class EventEntity(EventBase):
             return self.target_userid in read_user_ids
         else:
             return all(user_id in read_user_ids for user_id in user_ids)
-
-    def set_event_read(self, event: EventBase):
-        if self.id != event.id:
-            raise ValueError("Event id not match")
-        if self.is_global:
-            self.read_users.append(ReadUsersEntity(user_id=event.target_userid, read_at=datetime.now(timezone.utc)))
-        else:
-            self.read_users = [ReadUsersEntity(user_id=event.target_userid, read_at=datetime.now(timezone.utc))]
 
     @hybrid_property
     def is_global(self):
@@ -162,7 +150,7 @@ class ReadUsersEntity:
     user_id: int = field(metadata={'sa': Column(Integer, ForeignKey('user.id'), nullable=False)})
     read_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
 
-    event: EventEntity = field(metadata={'sa': relationship('EventEntity', back_populates='read_users')})
+    # event: EventEntity = field(default=None, metadata={'sa': relationship('EventEntity', back_populates='read_users')})
 class TaskCompletedPayload(PayloadBase):
     task_name: str
     task_result: str

@@ -7,7 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from funlab.flaskr.sse.manager import EventManager
-from funlab.flaskr.sse.models import EventPriority
+from funlab.flaskr.sse.models import EventPriority, PayloadBase
 if TYPE_CHECKING:
     from enum import EnumMeta
 from http.client import HTTPException
@@ -16,7 +16,7 @@ from pathlib import Path
 from queue import Queue
 import traceback
 
-from flask import (Blueprint, Flask, Response, g, redirect, render_template, request, url_for)
+from flask import (Blueprint, Flask, Response, g, redirect, render_template, request, stream_with_context, url_for)
 from flask_login import current_user, login_required
 from funlab.core.auth import admin_required
 from funlab.core.menu import MenuItem, MenuDivider
@@ -92,27 +92,44 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
-        @self.blueprint.route('/events/<int:user_id>')
+        @self.blueprint.route('/events')
         def stream_events(user_id):
+            user_id = current_user.id
+            stream_id = self.event_manager.register_user_stream(user_id)
+
             def event_stream():
-                user_stream = self.event_manager.register_user_stream(user_id)
+                user_stream = self.event_manager.connection_manager.user_connections[user_id][stream_id]
                 try:
                     while True:
                         try:
                             event = user_stream.get(timeout=10)  # Wait for an event or timeout
-                            yield f"data: {event.to_json()}\n\n"
+                            yield event.sse_format()
                         except queue.Empty:
                             # Send a heartbeat if no event is received within the timeout
                             yield f"data: heartbeat\n\n"
                             time.sleep(1)  # Sleep for a short period to avoid busy-waiting
                 except GeneratorExit:
-                    self.event_manager.unregister_user_stream(user_id, user_stream)
+                    self.event_manager.unregister_user_stream(user_id, stream_id)
+                except Exception as e:
+                    self.mylogger.error(f"Event stream exited, error: {e}")
+                    self.event_manager.unregister_user_stream(user_id, stream_id)
+                    raise e
+            response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
+            response.headers['X-Stream-ID'] = stream_id
+            return response
 
-            return Response(event_stream(), content_type='text/event-stream')
-
+        @self.blueprint.route('/unregister_stream', methods=['POST'])
+        def unregister_stream(user_id):
+            user_id = current_user.id
+            stream_id = request.form.get('stream_id')
+            # user_stream = self.event_manager.get_user_streams(user_id)
+            if stream_id:
+                self.event_manager.unregister_user_stream(user_id, stream_id)
+            return '', 204
+            
         @self.blueprint.route('/create_event', methods=['POST'])
         def create_event():
-            payload = self.PayloadBase(data="example data")
+            payload = PayloadBase(data="example data")
             self.event_manager.create_event(
                 event_type="example_event",
                 payload=payload,
@@ -122,8 +139,8 @@ class FunlabFlask(_FlaskBase):
             return "Event created", 201
 
         @self.errorhandler(403)
-            def access_deny_error(error):
-                return render_template('error-403.html', msg=str(error)), 403
+        def access_deny_error(error):
+            return render_template('error-403.html', msg=str(error)), 403
 
         @self.errorhandler(404)
         def not_found_error(error):
@@ -144,40 +161,6 @@ class FunlabFlask(_FlaskBase):
 
         # Need to call flask's register_blueprint for all route, after route defined
         self.register_blueprint(self.blueprint)
-
-    def register_sse_routes(self):
-        self.sse_blueprint = Blueprint(
-            'sse_bp',
-            import_name='funlab.flaskr.sse',
-            static_folder='static',
-            template_folder='templates',
-        )
-        def consume_events(event_type: str):
-            event_queue = self.sse_queues[event_type]
-            while True:
-                event = event_queue.get()
-                if event is None:  # Exit condition for the thread
-                    break
-                yield f"data: {json.dumps(event.__dict__)}\n\n"
-                time.sleep(1)
-
-        @self.sse_blueprint.route('/sse/<event_type>')
-        @login_required
-        def sse(event_type):
-            event_type = event_type
-            return Response(consume_events(event_type), content_type='text/event-stream')
-
-        @self.sse_blueprint.route('/sse/publish', methods=['POST'])
-        def publish_event():
-            event_type = request.json['event_type']
-            payload = request.json['payload']
-            event = SSEData(event_type=event_type, payload=payload)
-            self.sse_queues[event_type].put(event)
-            return '', 204
-
-        # Need to call flask's register_blueprint for all route, after route defined
-        self.register_blueprint(self.sse_blueprint)
-
 
     def register_routes_menu(self):
         self.append_usermenu([MenuDivider(),
