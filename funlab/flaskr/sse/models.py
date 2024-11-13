@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from funlab.core import _Readable
+from funlab.flaskr.sse.manager import EventManager
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column, DateTime, Integer, String, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
@@ -151,6 +152,32 @@ class ReadUsersEntity:
     read_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
 
     # event: EventEntity = field(default=None, metadata={'sa': relationship('EventEntity', back_populates='read_users')})
+
+
+class SystemNotificationPayload(PayloadBase):
+    title: str
+    message: str
+
+class SystemNotificationEvent(EventBase):
+    event_type = 'system_notification'
+    payload: SystemNotificationPayload
+
+    def __init__(self, title: str, message: str, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL,
+                 is_read: bool = False, created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None):
+        self.payload = SystemNotificationPayload(title=title, message=message)
+        self.target_userid = target_userid
+        self.priority = priority
+        self.is_read = is_read
+        self.created_at = created_at
+        self.expires_at = expires_at
+
+    def __str__(self):
+        return f"SystemNotificationEvent(title={self.payload.title}, message={self.payload.message}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expires_at={self.expires_at})"
+
+    def __repr__(self):
+        return self.__str__()
+
+EventManager.register_event('system_notification', SystemNotificationEvent)
 class TaskCompletedPayload(PayloadBase):
     task_name: str
     task_result: str
