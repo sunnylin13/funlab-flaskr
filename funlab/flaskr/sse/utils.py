@@ -42,22 +42,22 @@ class Metrics:
             self.delivery_times = []
             self.start_time = datetime.utcnow()
 
-    def record_event(self, event_type: str, status: EventStatus, delivery_time: Optional[float] = None):
-        with self._lock:
-            self.total_events += 1
+    # def record_event(self, event_type: str, status: EventStatus, delivery_time: Optional[float] = None):
+    #     with self._lock:
+    #         self.total_events += 1
 
-            if status == EventStatus.DELIVERED:
-                self.delivered_events += 1
-            elif status == EventStatus.FAILED:
-                self.failed_events += 1
+    #         if status == EventStatus.DELIVERED:
+    #             self.delivered_events += 1
+    #         elif status == EventStatus.FAILED:
+    #             self.failed_events += 1
 
-            if event_type == 'global':
-                self.global_events += 1
-            else:
-                self.user_events += 1
+    #         if event_type == 'global':
+    #             self.global_events += 1
+    #         else:
+    #             self.user_events += 1
 
-            if delivery_time is not None:
-                self.delivery_times.append(delivery_time)
+    #         if delivery_time is not None:
+    #             self.delivery_times.append(delivery_time)
 
     def get_stats(self) -> dict:
         with self._lock:
