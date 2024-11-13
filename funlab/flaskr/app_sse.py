@@ -92,32 +92,6 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
-        # @self.blueprint.route('/events')
-        # def stream_events(user_id):
-        #     user_id = current_user.id
-        #     stream_id = self.event_manager.register_user_stream(user_id)
-
-        #     def event_stream():
-        #         user_stream = self.event_manager.connection_manager.user_connections[user_id][stream_id]
-        #         try:
-        #             while True:
-        #                 try:
-        #                     event = user_stream.get(timeout=10)  # Wait for an event or timeout
-        #                     yield event.sse_format()
-        #                 except queue.Empty:
-        #                     # Send a heartbeat if no event is received within the timeout
-        #                     yield f"data: heartbeat\n\n"
-        #                     time.sleep(1)  # Sleep for a short period to avoid busy-waiting
-        #         except GeneratorExit:
-        #             self.event_manager.unregister_user_stream(user_id, stream_id)
-        #         except Exception as e:
-        #             self.mylogger.error(f"Event stream exited, error: {e}")
-        #             self.event_manager.unregister_user_stream(user_id, stream_id)
-        #             raise e
-        #     response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
-        #     response.headers['X-Stream-ID'] = stream_id
-        #     return response
-
         @self.blueprint.route('/sse/<event_type>')
         @login_required
         def stream_events(event_type):
