@@ -11,13 +11,13 @@ class EventValidator:
         if not all(field in event_data for field in required_fields):
             return False, f"Missing required fields: {required_fields - set(event_data.keys())}"
 
-        if 'expires_at' in event_data:
+        if 'expired_at' in event_data:
             try:
-                expires_at = datetime.fromisoformat(event_data['expires_at'])
-                if expires_at < datetime.utcnow():
+                expired_at = datetime.fromisoformat(event_data['expired_at'])
+                if expired_at < datetime.utcnow():
                     return False, "Event already expired"
             except ValueError:
-                return False, "Invalid expires_at format"
+                return False, "Invalid expired_at format"
 
         if 'priority' in event_data:
             try:
