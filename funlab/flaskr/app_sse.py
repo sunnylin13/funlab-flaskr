@@ -1,13 +1,14 @@
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import queue
 import time
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from funlab.flaskr.sse.manager import EventManager
-from funlab.flaskr.sse.models import EventPriority, PayloadBase
+from funlab.flaskr.sse.models import EventBase, EventPriority, PayloadBase, SystemNotificationEvent, SystemNotificationPayload
 if TYPE_CHECKING:
     from enum import EnumMeta
 from http.client import HTTPException
@@ -27,7 +28,9 @@ from funlab.utils import vars2env
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
+        EventManager.register_event(SystemNotificationEvent)
         self.event_manager = EventManager(self.dbmgr)
+        
 
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
@@ -38,6 +41,14 @@ class FunlabFlask(_FlaskBase):
         data_path = self.get_user_data_storage_path(username)
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
+
+    def send_system_notification(self, title:str, message:str, 
+                    target_userid: Optional[int] = None,
+                    priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
+        self.app.event_manager.create_event(event_type="SystemNotification",
+                target_userid=target_userid, priority=priority, 
+                expire_after=expire_after, title=title, message=message)
+                
 
     def load_user_file(self, username:str, filename:str):
         data_path = self.get_user_data_storage_path(username)
@@ -129,17 +140,6 @@ class FunlabFlask(_FlaskBase):
             if stream_id:
                 self.event_manager.unregister_user_stream(user_id, stream_id)
             return '', 204
-
-        @self.blueprint.route('/create_event', methods=['POST'])
-        def create_event():
-            payload = PayloadBase(data="example data")
-            self.event_manager.create_event(
-                event_type="example_event",
-                payload=payload,
-                target_userid=1,
-                priority=EventPriority.NORMAL
-            )
-            return "Event created", 201
 
         @self.errorhandler(403)
         def access_deny_error(error):

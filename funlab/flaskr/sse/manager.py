@@ -1,7 +1,7 @@
 import logging
 import queue
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Set
 from flask import Flask
 from funlab.core.dbmgr import DbMgr
@@ -67,7 +67,6 @@ class ConnectionManager:
 
 class EventManager:
     _event_classes: Dict[str, type[EventBase]] = {}
-    # _payload_classes: Dict[str, type[PayloadBase]] = {}
 
     def __init__(self, dbmgr:DbMgr, max_event_queue_size=1000, max_events_per_stream=100):
         self.mylogger = log.get_logger(self.__class__.__name__, level=logging.INFO)
@@ -83,31 +82,27 @@ class EventManager:
         self.distributor_thread = self.start_event_distributor()
 
     @classmethod
-    def register_event(cls, event_type: str, event_class: type[EventBase]): # , payload_class: type[PayloadBase]):
-        cls._event_classes[event_type] = event_class, 
-        # cls._payload_classes[event_type] = payload_class
+    def register_event(cls, event_class: type[EventBase]): # , payload_class: type[PayloadBase]):
+        event_type = event_class.__name__.removesuffix('Event')
+        cls._event_classes[event_type] = event_class
 
-    def create_event(self, event_type: str, payload: PayloadBase,
+    def create_event(self, event_type: str, 
                     target_userid: Optional[int] = None,
-                    priority: EventPriority = EventPriority.NORMAL,
-                    created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None,
-                    **kwargs) -> EventBase:
-        if event_type not in self._event_classes:
-            raise ValueError(f"Not register event class for event type: {event_type}")
-        # if event_type not in self._payload_classes:
-        #     raise ValueError(f"Not register payload type for event type: {event_type}")
-        event_class = self._event_classes[event_type]
-        event = event_class(event_type=event_type, payload=payload,
-                           target_userid=target_userid, priority=priority, created_at=created_at, expires_at=expires_at,
-                           **kwargs)
+                    priority: EventPriority = EventPriority.NORMAL, expire_after: int = None,  # minutes
+                    **payload_kwargs) -> EventBase:
+        if not(event_class:= self._event_classes.get(event_type, None)):
+            raise ValueError(f"Not register event class for event type: {event_type}")    
+        expired_at = datetime.now(timezone.utc) + timedelta(minutes=expire_after) if expire_after else None
+        event = event_class(target_userid=target_userid, priority=priority, expired_at=expired_at,
+                           **payload_kwargs)
         # Store in database
         self._store_event(event)
         try:
             self._put_event(event)
         except queue.Full:
-            self.mylogger.error("Too much event, event queue is full???!!!")
-            raise RuntimeError("Too much event, event queue is full???!!!")
-
+            self.mylogger.error(f"Event queue is full! Event {event} is dropped!")
+            event = None    
+        return event
 
     def _put_event(self, event: EventBase):
         with self.lock:
@@ -150,7 +145,7 @@ class EventManager:
                     break
 
     def _distribute_event(self, event: EventBase):
-        if event.is_global():
+        if event.is_global:
             streams = self.connection_manager.get_all_streams()
         else:
             streams = self.connection_manager.get_user_streams(event.target_userid)

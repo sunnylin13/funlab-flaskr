@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+import json
 from funlab.core import _Readable
-from funlab.flaskr.sse.manager import EventManager
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column, DateTime, Integer, String, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
@@ -10,15 +10,23 @@ from sqlalchemy.orm import relationship
 from funlab.core.appbase import APP_ENTITIES_REGISTRY as entities_registry
 from sqlalchemy.ext.hybrid import hybrid_property
 from tzlocal import get_localzone
+@dataclass
+class PayloadBase:
+    # @classmethod
+    # def from_jsonstr(cls, payload_str: str) -> 'PayloadBase':
+    #     return cls.model_validate_json(payload_str)
 
-class PayloadBase(BaseModel):
+    # def to_json(self):
+    #     return self.model_dump_json()
+
     @classmethod
     def from_jsonstr(cls, payload_str: str) -> 'PayloadBase':
-        return cls.model_validate_json(payload_str)
+        data = json.loads(payload_str)
+        return cls(**data)
 
-    def to_json(self):
-        return self.model_dump_json()
-
+    def to_json(self) -> str:
+        return json.dumps(self.__dict__)
+    
 class EventPriority(Enum):
     LOW = 0
     NORMAL = 1
@@ -34,13 +42,23 @@ class EventBase(_Readable):
         若是有target_userid, 則直接儲存成為event entity, read_users只有一筆
     """
     id: int = field(init=False)  # 需在存入db後才會有id
-    event_type: str
+    event_type: str = field(init=False, default='EventBase')  # 應在各子類別中定義default值
     payload: PayloadBase
     target_userid: int = None
     priority: EventPriority = EventPriority.NORMAL
     is_read: bool = field(init=False, default=False)  # 記錄對各別user該event是否已讀
-    created_at: datetime = datetime.now(timezone.utc)
-    expires_at: datetime = None
+    created_at: datetime = field(init=False, default=datetime.now(timezone.utc))
+    expired_at: datetime = None
+
+    def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None, 
+                 **payload_kwargs):
+        self.event_type = self.__class__.__name__.removesuffix('Event')
+        self.payload = self.__annotations__['payload'](**payload_kwargs)
+        self.target_userid = target_userid
+        self.priority = priority
+        self.is_read = False
+        self.created_at = datetime.now(timezone.utc)
+        self.expired_at = expired_at
 
     @property
     def is_global(self):
@@ -48,7 +66,7 @@ class EventBase(_Readable):
 
     @property
     def is_expired(self):
-        return self.expires_at and datetime.now(timezone.utc) > self.expires_at
+        return self.expired_at and datetime.now(timezone.utc) > self.expired_at
 
     @property
     def local_created_at(self):
@@ -58,10 +76,10 @@ class EventBase(_Readable):
 
     @property
     def local_expires_at(self):
-        """Convert expires_at to the local timezone for display."""
-        if self.expires_at:
+        """Convert expired_at to the local timezone for display."""
+        if self.expired_at:
             local_tz = get_localzone()
-            return self.expires_at.astimezone(local_tz)
+            return self.expired_at.astimezone(local_tz)
         return None
 
     def to_json(self):
@@ -79,7 +97,7 @@ class EventBase(_Readable):
             priority=self.priority,
             read_users= [],  # event 一定是未讀or未過期的才需被儲存
             created_at=self.created_at,
-            expires_at=self.expires_at
+            expired_at=self.expired_at
         )
 
     @classmethod
@@ -89,13 +107,11 @@ class EventBase(_Readable):
             # raise ValueError("Should create event object from read or expired EventEntity")
             return None
         return cls(
-            event_type=entity.event_type,
-            payload=PayloadBase.from_jsonstr(entity.payload) if isinstance(entity.payload, str) else entity.payload,
+            # just a magic method to get the playload class
+            payload=cls.__annotations__['payload'].from_jsonstr(entity.payload) if isinstance(entity.payload, str) else entity.payload,
             target_userid=entity.target_userid,
             priority=entity.priority,
-            is_read=False,  # event 一定是未讀的才會被發送
-            created_at=entity.created_at,
-            expires_at=entity.expires_at
+            expired_at=entity.expired_at
         )
 
     def sse_format(self):
@@ -119,7 +135,7 @@ class EventEntity(EventBase):
     # if target_userid is None, it is a global event then need to keep track of read users
     read_users: list['ReadUsersEntity'] = field(default_factory=list, metadata={'sa': relationship('ReadUsersEntity')})  # , back_populates='event'
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
-    expires_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
+    expired_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
 
     def post_init(self):
         self.payload = PayloadBase.from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
@@ -138,7 +154,7 @@ class EventEntity(EventBase):
 
     @hybrid_property
     def is_expired(self):
-        return self.expires_at and datetime.now(timezone.utc) > self.expires_at
+        return self.expired_at and datetime.now(timezone.utc) > self.expired_at
 
 @entities_registry.mapped
 @dataclass
@@ -154,30 +170,29 @@ class ReadUsersEntity:
     # event: EventEntity = field(default=None, metadata={'sa': relationship('EventEntity', back_populates='read_users')})
 
 
+@dataclass
 class SystemNotificationPayload(PayloadBase):
     title: str
     message: str
 
+@dataclass
 class SystemNotificationEvent(EventBase):
-    event_type = 'system_notification'
     payload: SystemNotificationPayload
 
-    def __init__(self, title: str, message: str, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL,
-                 is_read: bool = False, created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None):
-        self.payload = SystemNotificationPayload(title=title, message=message)
-        self.target_userid = target_userid
-        self.priority = priority
-        self.is_read = is_read
-        self.created_at = created_at
-        self.expires_at = expires_at
+    # def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL,
+    #              is_read: bool = False, created_at: datetime = datetime.now(timezone.utc), expired_at: datetime = None, **payload_kwargs):
+    #     self.payload = SystemNotificationPayload(**payload_kwargs)
+    #     self.target_userid = target_userid
+    #     self.priority = priority
+    #     self.is_read = is_read
+    #     self.created_at = created_at
+    #     self.expired_at = expired_at
 
-    def __str__(self):
-        return f"SystemNotificationEvent(title={self.payload.title}, message={self.payload.message}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expires_at={self.expires_at})"
+    # def __str__(self):
+    #     return f"SystemNotificationEvent(title={self.payload.title}, message={self.payload.message}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expired_at={self.expired_at})"
 
-    def __repr__(self):
-        return self.__str__()
-
-EventManager.register_event('system_notification', SystemNotificationEvent)
+    # def __repr__(self):
+    #     return self.__str__()
 class TaskCompletedPayload(PayloadBase):
     task_name: str
     task_result: str
@@ -190,16 +205,16 @@ class TaskCompletedEvent(EventBase):
 
     def __init__(self, task_name: str, task_result: str, task_start_time: datetime, task_end_time: datetime,
                  target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, is_read: bool = False,
-                 created_at: datetime = datetime.now(timezone.utc), expires_at: datetime = None):
+                 created_at: datetime = datetime.now(timezone.utc), expired_at: datetime = None):
         self.payload = TaskCompletedPayload(task_name=task_name, task_result=task_result, task_start_time=task_start_time, task_end_time=task_end_time)
         self.target_userid = target_userid
         self.priority = priority
         self.is_read = is_read
         self.created_at = created_at
-        self.expires_at = expires_at
+        self.expired_at = expired_at
 
     def __str__(self):
-        return f"TaskCompletedEvent(task_name={self.payload.task_name}, task_result={self.payload.task_result}, task_start_time={self.payload.task_start_time}, task_end_time={self.payload.task_end_time}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expires_at={self.expires_at})"
+        return f"TaskCompletedEvent(task_name={self.payload.task_name}, task_result={self.payload.task_result}, task_start_time={self.payload.task_start_time}, task_end_time={self.payload.task_end_time}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expired_at={self.expired_at})"
 
     def __repr__(self):
         return self.__str__()
