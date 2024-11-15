@@ -190,11 +190,11 @@ class EventManager:
 
     def register_user_stream(self, user_id: int) -> queue.Queue[EventBase]:
         stream = queue.Queue(maxsize=self.max_events_per_stream)
-        if self.connection_manager.add_connection(user_id, stream):
-            return stream
+        if stream_id:=self.connection_manager.add_connection(user_id, stream):
+            return stream_id
         return None
 
-    def unregister_user_stream(self, user_id: int, stream: queue.Queue[EventBase]):
-        self.connection_manager.remove_connection(user_id, stream)
+    def unregister_user_stream(self, user_id: int, stream_id: str):
+        self.connection_manager.remove_connection(user_id, stream_id)
 
 
