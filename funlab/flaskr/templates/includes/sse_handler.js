@@ -5,11 +5,12 @@ function subscribeToEvent(eventType, renderFunction) {
     eventSource.onmessage = function(event) {
         // Check if the message is a heartbeat
         if (event.data === "heartbeat") {
-            // console.log("Received heartbeat");
+            console.log("Received heartbeat");
             return; // Ignore heartbeat messages
         }
+        console.log("Received event type:", eventType);
+        console.log("Received event data:", event.data);
         const data = JSON.parse(event.data);
-        console.log("Received notitication:", data);
         renderFunction(data, eventType);
     };
 
