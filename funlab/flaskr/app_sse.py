@@ -31,7 +31,6 @@ class FunlabFlask(_FlaskBase):
         EventManager.register_event(SystemNotificationEvent)
         self.event_manager = EventManager(self.dbmgr)
         
-
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
         data_path.mkdir(parents=True, exist_ok=True)
@@ -42,8 +41,20 @@ class FunlabFlask(_FlaskBase):
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
-    def send_system_notification(self, title:str, message:str, 
-                    target_userid: Optional[int] = None,
+    def _get_all_user_id(self):  
+        # todo get all user id 
+        return []
+
+    def send_all_users_system_notification(self, title:str, message:str,
+                    priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
+        # todo get all user id and send one by one
+        for target_userid in self._get_all_user_id():
+            self.app.event_manager.create_event(event_type="SystemNotification",
+                    target_userid=target_userid, priority=priority, 
+                    expire_after=expire_after, title=title, message=message)
+
+    def send_user_system_notification(self, title:str, message:str, 
+                    target_userid: int = None,
                     priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
         self.app.event_manager.create_event(event_type="SystemNotification",
                 target_userid=target_userid, priority=priority, 
@@ -116,10 +127,18 @@ class FunlabFlask(_FlaskBase):
                         try:
                             event = user_stream.get(timeout=10)  # Wait for an event or timeout
                             if event.event_type == event_type:
-                                yield event.sse_format()
+                                sse = event.sse_format()
+                                self.mylogger.info(f"Event stream: {sse}")
+                                yield sse
+                            
                         except queue.Empty:
                             # Send a heartbeat if no event is received within the timeout
-                            yield f"data: heartbeat\n\n"
+                            yield f"event: heartbeat\ndata: heartbeat\n\n"
+                            time.sleep(3)  # Sleep for a short period to avoid busy-waiting
+                            data = json.dumps({'title': 'Task', 'message': 'Task is completed'})
+                            sse =  f"event: SystemNotification\ndata: {data}\n\n"
+                            self.mylogger.info(f"Event stream: {sse}")
+                            yield sse
                             time.sleep(1)  # Sleep for a short period to avoid busy-waiting
                 except GeneratorExit:
                     self.event_manager.unregister_user_stream(user_id, stream_id)

@@ -9,7 +9,7 @@ from funlab.flaskr.sse.utils import Metrics
 from funlab.utils import log
 from sqlalchemy import select
 
-from .models import EventBase, EventEntity, EventPriority, PayloadBase, ReadUsersEntity
+from .models import EventBase, EventEntity, EventPriority
 import queue
 import threading
 import time
@@ -87,7 +87,7 @@ class EventManager:
         cls._event_classes[event_type] = event_class
 
     def create_event(self, event_type: str, 
-                    target_userid: Optional[int] = None,
+                    target_userid: int,
                     priority: EventPriority = EventPriority.NORMAL, expire_after: int = None,  # minutes
                     **payload_kwargs) -> EventBase:
         if not(event_class:= self._event_classes.get(event_type, None)):
@@ -115,19 +115,23 @@ class EventManager:
                 session.commit()
                 event.id = event_entity.id
 
-    def set_event_read(self, event: EventBase, read_user_id: int):
+    def set_event_read(self, event: EventBase):
+        event.is_read = True
         with self.dbmgr.session_context() as session:
-            if event_entity:= session.query(EventEntity).filter_by(event_id=event.id).first():
-                if event.is_global() and \
-                    not any(read_user.user_id == read_user_id for read_user in event_entity.read_users):
-                        event_entity.read_users.append(ReadUsersEntity(user_id=read_user_id))
-                else:
-                    if event.target_userid==read_user_id:
-                        # self._remove_event_from_queue(event)
-                        event.is_read = True
-                        session.delete(event_entity)
-                    else:
-                        self.mylogger.error(f"set_event_read for Event {event.id} target_user:{event.target_userid} is not for user {read_user_id}")
+            if event_entity:= session.query(EventEntity).filter_by(id=event.id).one_or_none():
+                event_entity.is_read = True
+
+                # remove global event concept
+                # if event.is_global() and \
+                #     not any(read_user.user_id == read_user_id for read_user in event_entity.read_users):
+                #         event_entity.read_users.append(ReadUsersEntity(user_id=read_user_id))
+                # else:
+                # if event.target_userid==read_user_id:
+                #     # self._remove_event_from_queue(event)
+                #     event.is_read = True
+                #     session.delete(event_entity)
+                # else:
+                #     self.mylogger.error(f"set_event_read for Event {event.id} target_user:{event.target_userid} is not for user {read_user_id}")
 
     def _recover_stored_events(self):
         with self.dbmgr.session_context() as session:
@@ -145,10 +149,12 @@ class EventManager:
                     break
 
     def _distribute_event(self, event: EventBase):
-        if event.is_global:
-            streams = self.connection_manager.get_all_streams()
-        else:
-            streams = self.connection_manager.get_user_streams(event.target_userid)
+        # remove global event concept, if need to be global, send to all
+        # if event.is_global:
+        #     streams = self.connection_manager.get_all_streams()
+        # else:
+        #     streams = self.connection_manager.get_user_streams(event.target_userid)
+        streams = self.connection_manager.get_user_streams(event.target_userid)
         for stream in streams:
             try:
                 if stream.qsize() < self.max_events_per_stream:
