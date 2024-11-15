@@ -1,3 +1,4 @@
+import ast
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -42,8 +43,8 @@ class EventBase(_Readable):
         若是有target_userid, 則直接儲存成為event entity, read_users只有一筆
     """
     id: int = field(init=False)  # 需在存入db後才會有id
-    event_type: str = field(init=False, default='EventBase')  # 應在各子類別中定義default值
-    payload: PayloadBase
+    event_type: str = field(init=False)  # 應在各子類別中定義default值
+    payload: PayloadBase = field(init=False)
     target_userid: int = None
     priority: EventPriority = EventPriority.NORMAL
     is_read: bool = field(init=False, default=False)  # 記錄對各別user該event是否已讀
@@ -107,11 +108,10 @@ class EventBase(_Readable):
             # raise ValueError("Should create event object from read or expired EventEntity")
             return None
         return cls(
-            # just a magic method to get the playload class
-            payload=cls.__annotations__['payload'].from_jsonstr(entity.payload) if isinstance(entity.payload, str) else entity.payload,
             target_userid=entity.target_userid,
             priority=entity.priority,
-            expired_at=entity.expired_at
+            expired_at=entity.expired_at, 
+            **ast.literal_eval(entity.payload) if isinstance(entity.payload, str) else entity.payload.__dict__
         )
 
     def sse_format(self):
@@ -177,7 +177,11 @@ class SystemNotificationPayload(PayloadBase):
 
 @dataclass
 class SystemNotificationEvent(EventBase):
-    payload: SystemNotificationPayload
+    payload: SystemNotificationPayload = field(init=False)
+
+    def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None, 
+                 **payload_kwargs):
+        super().__init__(target_userid=target_userid, priority=priority, expired_at=expired_at, **payload_kwargs)
 
     # def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL,
     #              is_read: bool = False, created_at: datetime = datetime.now(timezone.utc), expired_at: datetime = None, **payload_kwargs):
