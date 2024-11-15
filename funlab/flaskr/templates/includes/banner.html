@@ -187,7 +187,7 @@
         {% endif %}
     </div>
 </header>
-<script src="./sse_handler.js"></script>
+<script src="/templates/includes/sse_handler.js"></script>
 <script>
     function renderNotification(data, elementId) {
         const eventDiv = document.createElement('div');
@@ -212,6 +212,7 @@
             </div>
         `;
         document.getElementById(elementId).appendChild(eventDiv);
+        console.log("update document:", elementId, data);
     }
     subscribeToEvent('SystemNotification', renderNotification);
 </script>
