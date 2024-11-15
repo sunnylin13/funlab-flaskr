@@ -199,8 +199,12 @@
             }
             console.log("Received event type:", eventType);
             console.log("Received event data:", event.data);
-            const data = JSON.parse(event.data);
-            renderFunction(data, eventType);
+            try {
+                const data = JSON.parse(event.data);
+                renderFunction(data, eventType);
+            } catch (error) {
+                console.error("Failed to parse event data:", event.data, error);
+            }
         };
 
         eventSource.onerror = function(event) {
@@ -234,7 +238,7 @@
             </div>
         `;
         document.getElementById(elementId).appendChild(eventDiv);
-        console.log("update document:", elementId, data);
+        //console.log("update document:", elementId, data);
     }
     subscribeToEvent('SystemNotification', renderNotification);
 </script>
