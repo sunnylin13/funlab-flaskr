@@ -27,10 +27,10 @@ class PayloadBase:
 
     def to_json(self) -> str:
         return json.dumps(self.__dict__)
-    
+
     def __str__(self):
         return self.to_json()
-    
+
 class EventPriority(Enum):
     LOW = 0
     NORMAL = 1
@@ -54,7 +54,7 @@ class EventBase(_Readable):
     created_at: datetime = field(init=False, default=datetime.now(timezone.utc))
     expired_at: datetime = None
 
-    def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None, 
+    def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None,
                  **payload_kwargs):
         self.event_type = self.__class__.__name__.removesuffix('Event')
         self.payload = self.__annotations__['payload'](**payload_kwargs)
@@ -96,11 +96,12 @@ class EventBase(_Readable):
             return None
         entity =  EventEntity(
             event_type=self.event_type,
+            payload=self.payload.to_json(),
             target_userid=self.target_userid,
             priority=self.priority,
             expired_at=self.expired_at
         )
-        entity.payload=self.payload.to_json()
+
         entity.is_read = self.is_read
         entity.created_at = self.created_at
         return entity
@@ -114,7 +115,7 @@ class EventBase(_Readable):
         event = cls(
             target_userid=entity.target_userid,
             priority=entity.priority,
-            expired_at=entity.expired_at, 
+            expired_at=entity.expired_at,
             **ast.literal_eval(entity.payload) if isinstance(entity.payload, str) else entity.payload.__dict__
         )
         event.id = entity.id
@@ -189,7 +190,7 @@ class SystemNotificationPayload(PayloadBase):
 class SystemNotificationEvent(EventBase):
     payload: SystemNotificationPayload = field(init=False)
 
-    def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None, 
+    def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None,
                  **payload_kwargs):
         super().__init__(target_userid=target_userid, priority=priority, expired_at=expired_at, **payload_kwargs)
 
