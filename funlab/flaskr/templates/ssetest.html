@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Test</title>
+</head>
+<body>
+    <h1>System Notifications</h1>
+    <div id="SystemNotification"></div>
+
+    <form id="notificationForm">
+        <label for="title">Title:</label>
+        <input type="text" id="title" name="title" value="Test Notification">
+        <br>
+        <label for="message">Message:</label>
+        <input type="text" id="message" name="message" value="This is a test notification.">
+        <br>
+        <button type="submit">Send Notification</button>
+    </form>
+
+    <script>
+
+        function subscribeToEvent(eventType, renderFunction) {
+            // Create a new EventSource instance to connect to the SSE endpoint
+            //const eventSource = new EventSource('/sse/SystemNotification');
+            const eventSource = new EventSource(`/sse/${eventType}`);
+            console.log("sbucribeToEvent called with eventType:", eventType);
+            // Add event listener for 'SystemNotification' events
+            eventSource.addEventListener('SystemNotification', handleEvent2);
+            eventSource.onmessage = function(event) {
+                // Check if the message is a heartbeat
+                if (event.data === "heartbeat") {
+                    console.log("Received heartbeat");
+                    return; // Ignore heartbeat messages
+                }
+                console.log("Received event data:", event.data);
+                const data = JSON.parse(event.data);
+                renderFunction(data, eventType);
+            };
+
+            eventSource.onerror = function(event) {
+                console.error("SSE connection error:", event);
+            };
+
+            window.addEventListener('beforeunload', function() {
+                eventSource.close();
+            });
+            // Log connection open
+            eventSource.onopen = function(event) {
+                console.log('SSE connection opened:', event);
+            };
+
+            // Log messages
+            //eventSource.onmessage = function(event) {
+            //    console.log('SSE message received:', event);
+            //};
+        }
+        function handleEvent2(event) {
+            console.log("Received event type:", event.event);
+            console.log("Received event data:", event.data);
+            const data = JSON.parse(event.data);
+
+            renderNotification(data, event.event);
+        }
+
+        function renderNotification(data, elementId) {
+            const notificationDiv = document.getElementById(elementId);
+            const notification = document.createElement('div');
+            notification.innerHTML = `<strong>${data.title}</strong>: ${data.message}`;
+            notificationDiv.appendChild(notification);
+        }
+        console.log("Subscribing to SystemNotification events");
+        subscribeToEvent('SystemNotification', renderNotification);
+
+
+    </script>
+</body>
+</html>

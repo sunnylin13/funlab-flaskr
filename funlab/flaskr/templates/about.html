@@ -46,5 +46,77 @@
         <p >About FunLab</p>
     </div>
 </div>
-
+<!-- Add a container for notifications -->
+<div id="notification-container" class="mt-4">
+    <h3>Notifications</h3>
+    <div id="notifications" class="list-group"></div>
+</div>
 {% endblock page_body %}
+
+{% block scripts %}
+<script>
+    function subscribeToEvent(eventType, renderFunction) {
+        console.log(`Subscribing to event: ${eventType}`);
+        const eventSource = new EventSource(`/sse/${eventType}`);
+
+        eventSource.onopen = function() {
+            console.log(`Connection to /sse/${eventType} opened.`);
+        };
+
+        eventSource.onmessage = function(event) {
+            console.log("Received message:", event);
+            if (event.data === "heartbeat") {
+                console.log("Received heartbeat");
+                return;
+            }
+            console.log("Received event type:", eventType);
+            console.log("Received event data:", event.data);
+            try {
+                const data = JSON.parse(event.data);
+                renderFunction(data, eventType);
+            } catch (error) {
+                console.error("Failed to parse event data:", event.data, error);
+            }
+        };
+
+        eventSource.onerror = function(event) {
+            console.error("EventSource failed:", event);
+            if (eventSource.readyState === EventSource.CLOSED) {
+                console.log("EventSource connection was closed.");
+            }
+        };
+
+        window.addEventListener('beforeunload', function() {
+            console.log("Closing EventSource connection.");
+            eventSource.close();
+        });
+    }
+
+    function renderNotification(data, eventType) {
+        const eventDiv = document.createElement('div');
+        eventDiv.classList.add('list-group-item');
+        eventDiv.innerHTML = `
+            <div class="row align-items-center">
+                <div class="col-auto"><span class="status-dot status-dot-animated bg-red d-block"></span></div>
+                <div class="col text-truncate">
+                    <a href="#" class="text-body d-block">${data.payload.title}</a>
+                    <div class="d-block text-muted text-truncate mt-n1">
+                        ${data.payload.message}
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <a href="#" class="list-group-item-actions">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        `;
+        document.getElementById('notifications').appendChild(eventDiv);
+    }
+
+    subscribeToEvent('SystemNotification', renderNotification);
+</script>
+{% endblock scripts %}
