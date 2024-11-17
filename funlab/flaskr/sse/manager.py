@@ -73,7 +73,7 @@ class EventManager:
         self.dbmgr:DbMgr = dbmgr
         self.connection_manager = ConnectionManager(max_connections_per_user=10)
         # todo: check if needed
-        # self.metrics = Metrics()  
+        # self.metrics = Metrics()
         self.event_queue: queue.Queue = queue.Queue(maxsize=max_event_queue_size)
         self.max_events_per_stream = max_events_per_stream
         self.lock = threading.Lock()
@@ -86,12 +86,12 @@ class EventManager:
         event_type = event_class.__name__.removesuffix('Event')
         cls._event_classes[event_type] = event_class
 
-    def create_event(self, event_type: str, 
+    def create_event(self, event_type: str,
                     target_userid: int,
                     priority: EventPriority = EventPriority.NORMAL, expire_after: int = None,  # minutes
                     **payload_kwargs) -> EventBase:
         if not(event_class:= self._event_classes.get(event_type, None)):
-            raise ValueError(f"Not register event class for event type: {event_type}")    
+            raise ValueError(f"Not register event class for event type: {event_type}")
         expired_at = datetime.now(timezone.utc) + timedelta(minutes=expire_after) if expire_after else None
         event = event_class(target_userid=target_userid, priority=priority, expired_at=expired_at,
                            **payload_kwargs)
@@ -101,7 +101,7 @@ class EventManager:
             self._put_event(event)
         except queue.Full:
             self.mylogger.error(f"Event queue is full! Event {event} is dropped!")
-            event = None    
+            event = None
         return event
 
     def _put_event(self, event: EventBase):
@@ -135,7 +135,7 @@ class EventManager:
 
     def _recover_stored_events(self):
         with self.dbmgr.session_context() as session:
-            stmt = select(EventEntity).order_by(EventEntity.created_at.asc())  # .where(EventEntity.is_expired == False)
+            stmt = select(EventEntity).order_by(EventEntity.priority.desc(), EventEntity.created_at.asc())  # .where(EventEntity.is_expired == False)
             unprocessed_events: list[EventEntity] = session.execute(stmt).scalars().all()
             for event_entity in unprocessed_events:
                 try:

@@ -17,7 +17,7 @@ from pathlib import Path
 from queue import Queue
 import traceback
 
-from flask import (Blueprint, Flask, Response, g, redirect, render_template, request, stream_with_context, url_for)
+from flask import (Blueprint, Flask, Response, g, jsonify, redirect, render_template, request, stream_with_context, url_for)
 from flask_login import current_user, login_required
 from funlab.core.auth import admin_required
 from funlab.core.menu import MenuItem, MenuDivider
@@ -30,7 +30,7 @@ class FunlabFlask(_FlaskBase):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
         EventManager.register_event(SystemNotificationEvent)
         self.event_manager = EventManager(self.dbmgr)
-        
+
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
         data_path.mkdir(parents=True, exist_ok=True)
@@ -41,8 +41,8 @@ class FunlabFlask(_FlaskBase):
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
-    def _get_all_user_id(self):  
-        # todo get all user id 
+    def _get_all_user_id(self):
+        # todo get all user id
         return []
 
     def send_all_users_system_notification(self, title:str, message:str,
@@ -50,16 +50,16 @@ class FunlabFlask(_FlaskBase):
         # todo get all user id and send one by one
         for target_userid in self._get_all_user_id():
             self.app.event_manager.create_event(event_type="SystemNotification",
-                    target_userid=target_userid, priority=priority, 
+                    target_userid=target_userid, priority=priority,
                     expire_after=expire_after, title=title, message=message)
 
-    def send_user_system_notification(self, title:str, message:str, 
+    def send_user_system_notification(self, title:str, message:str,
                     target_userid: int = None,
                     priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
-        self.app.event_manager.create_event(event_type="SystemNotification",
-                target_userid=target_userid, priority=priority, 
+        return self.app.event_manager.create_event(event_type="SystemNotification",
+                target_userid=target_userid, priority=priority,
                 expire_after=expire_after, title=title, message=message)
-                
+
 
     def load_user_file(self, username:str, filename:str):
         data_path = self.get_user_data_storage_path(username)
@@ -114,6 +114,22 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
+        @self.blueprint.route('/ssetest')
+        def ssetest():
+            return render_template('ssetest.html')
+
+        # Add this route to your blueprint
+        @self.blueprint.route('/generate_notification', methods=['POST'])
+        @login_required
+        def generate_notification():
+
+            title = request.form.get('title', 'Test Notification')
+            message = request.form.get('message', 'This is a test notification.')
+            priority = EventPriority.NORMAL  # You can change this as needed
+            expire_after = 5  # Expire after 5 minutes, you can change this as needed
+            event = self.send_user_system_notification(title, message, current_user.id, priority, expire_after)
+            return jsonify({"status": "success", "event_id": event.id}), 201
+
         @self.blueprint.route('/sse/<event_type>')
         @login_required
         def stream_events(event_type):
@@ -125,22 +141,23 @@ class FunlabFlask(_FlaskBase):
                 try:
                     while True:
                         try:
-                            event = user_stream.get(timeout=10)  # Wait for an event or timeout
+                            event:EventBase = user_stream.get(timeout=10)  # Wait for an event or timeout
                             if event.event_type == event_type:
                                 sse = event.sse_format()
                                 self.mylogger.info(f"Event stream: {sse}")
                                 yield sse
-                            
+
                         except queue.Empty:
                             # Send a heartbeat if no event is received within the timeout
                             yield f"event: heartbeat\ndata: heartbeat\n\n"
-                            time.sleep(3)  # Sleep for a short period to avoid busy-waiting
-                            data = json.dumps({'title': 'Task', 'message': 'Task is completed'})
-                            sse =  f"event: SystemNotification\ndata: {data}\n\n"
-                            self.mylogger.info(f"Event stream: {sse}")
-                            yield sse
+                            # time.sleep(3)  # Sleep for a short period to avoid busy-waiting
+                            # data = json.dumps({'title': 'Task', 'message': 'Task is completed'})
+                            # sse =  f"event: SystemNotification\ndata: {data}\n\n"
+                            # self.mylogger.info(f"Event stream: {sse}")
+                            # yield sse
                             time.sleep(1)  # Sleep for a short period to avoid busy-waiting
                 except GeneratorExit:
+                    self.mylogger.info(f"Client disconnected: user_id={user_id}, stream_id={stream_id}")
                     self.event_manager.unregister_user_stream(user_id, stream_id)
                 except Exception as e:
                     self.mylogger.error(f"Event stream exited, error: {e}")
@@ -192,6 +209,9 @@ class FunlabFlask(_FlaskBase):
                         MenuItem(title='about',
                             icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-square-rounded" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>',
                             href='/about'),
+                        MenuItem(title='ssetest',
+                            icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-square-rounded" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>',
+                            href='/ssetest'),
                         ])
 
 def create_app(configfile, envfile:str=None):

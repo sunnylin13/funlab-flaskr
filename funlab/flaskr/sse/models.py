@@ -119,7 +119,7 @@ class EventBase(_Readable):
             **ast.literal_eval(entity.payload) if isinstance(entity.payload, str) else entity.payload.__dict__
         )
         event.id = entity.id
-        event.payload = PayloadBase.from_jsonstr(entity.payload)
+        event.payload = cls.__annotations__['payload'].from_jsonstr(entity.payload)
         event.is_read = entity.is_read
         event.created_at = entity.created_at
         return event
@@ -149,7 +149,7 @@ class EventEntity(EventBase):
     expired_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
 
     def post_init(self):
-        self.payload = PayloadBase.from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
+        self.payload = self.__annotations__['payload'].from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
 
     # def is_users_read(self, user_ids: list[int]) -> bool:
     #     """應用於傳入系統所有的user_ids, 若都已讀, 則應自db中刪除此event entity"""
