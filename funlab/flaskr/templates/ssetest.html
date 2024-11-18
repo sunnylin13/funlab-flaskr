@@ -8,7 +8,6 @@
 <body>
     <h1>System Notifications</h1>
     <div id="SystemNotification"></div>
-
     <form id="notificationForm">
         <label for="title">Title:</label>
         <input type="text" id="title" name="title" value="Test Notification">
@@ -18,26 +17,15 @@
         <br>
         <button type="submit">Send Notification</button>
     </form>
-
     <script>
-
         function subscribeToEvent(eventType, renderFunction) {
-            // Create a new EventSource instance to connect to the SSE endpoint
-            //const eventSource = new EventSource('/sse/SystemNotification');
             const eventSource = new EventSource(`/sse/${eventType}`);
-            console.log("sbucribeToEvent called with eventType:", eventType);
-            // Add event listener for 'SystemNotification' events
-            eventSource.addEventListener('SystemNotification', handleEvent2);
-            eventSource.onmessage = function(event) {
-                // Check if the message is a heartbeat
-                if (event.data === "heartbeat") {
-                    console.log("Received heartbeat");
-                    return; // Ignore heartbeat messages
-                }
-                console.log("Received event data:", event.data);
+
+            eventSource.addEventListener(eventType, function(event) {
+                console.log('SSE message received:', event);
                 const data = JSON.parse(event.data);
-                renderFunction(data, eventType);
-            };
+                renderNotification(data, eventType);
+            });
 
             eventSource.onerror = function(event) {
                 console.error("SSE connection error:", event);
@@ -46,22 +34,17 @@
             window.addEventListener('beforeunload', function() {
                 eventSource.close();
             });
-            // Log connection open
+
             eventSource.onopen = function(event) {
                 console.log('SSE connection opened:', event);
             };
 
-            // Log messages
-            //eventSource.onmessage = function(event) {
-            //    console.log('SSE message received:', event);
-            //};
-        }
-        function handleEvent2(event) {
-            console.log("Received event type:", event.event);
-            console.log("Received event data:", event.data);
-            const data = JSON.parse(event.data);
-
-            renderNotification(data, event.event);
+            // Log messages and render notifications
+            // eventSource.onmessage = function(event) {
+            //     console.log('SSE message received:', event);
+            //     const data = JSON.parse(event.data);
+            //     renderFunction(data, eventType);
+            // };
         }
 
         function renderNotification(data, elementId) {
@@ -70,10 +53,25 @@
             notification.innerHTML = `<strong>${data.title}</strong>: ${data.message}`;
             notificationDiv.appendChild(notification);
         }
+
         console.log("Subscribing to SystemNotification events");
         subscribeToEvent('SystemNotification', renderNotification);
 
-
+        document.getElementById('notificationForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            fetch('/generate_notification', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Notification sent:', data);
+            })
+            .catch(error => {
+                console.error('Error sending notification:', error);
+            });
+        });
     </script>
 </body>
 </html>

@@ -187,44 +187,21 @@
         {% endif %}
     </div>
 </header>
-<!-- <script src="/templates/includes/sse_handler.js"></script> -->
+
+<!-- Include the SSE handler script -->
+<script src="/templates/includes/sse_handler.js"></script>
 <script>
-    function subscribeToEvent(eventType, renderFunction) {
-        const eventSource = new EventSource(`/sse/${eventType}`);
-        eventSource.onmessage = function(event) {
-            // Check if the message is a heartbeat
-            if (event.data === "heartbeat") {
-                console.log("Received heartbeat");
-                return; // Ignore heartbeat messages
-            }
-            console.log("Received event type:", eventType);
-            console.log("Received event data:", event.data);
-            try {
-                const data = JSON.parse(event.data);
-                renderFunction(data, eventType);
-            } catch (error) {
-                console.error("Failed to parse event data:", event.data, error);
-            }
-        };
-
-        eventSource.onerror = function(event) {
-            console.error("EventSource failed:", event);
-        };
-
-        window.addEventListener('beforeunload', function() {
-            eventSource.close();
-        });
-    }
     function renderNotification(data, elementId) {
+        // According to the SystemNotification event data, render the notification display in the UI
         const eventDiv = document.createElement('div');
         eventDiv.classList.add('list-group-item');
         eventDiv.innerHTML = `
             <div class="row align-items-center">
                 <div class="col-auto"><span class="status-dot status-dot-animated bg-red d-block"></span></div>
                 <div class="col text-truncate">
-                    <a href="#" class="text-body d-block">${data.payload.title}</a>
+                    <a href="#" class="text-body d-block">${data.title}</a>
                     <div class="d-block text-muted text-truncate mt-n1">
-                        ${data.payload.message}
+                        ${data.message}
                     </div>
                 </div>
                 <div class="col-auto">
@@ -238,7 +215,7 @@
             </div>
         `;
         document.getElementById(elementId).appendChild(eventDiv);
-        //console.log("update document:", elementId, data);
     }
+    // Subscribe to the SystemNotification event and render callback function
     subscribeToEvent('SystemNotification', renderNotification);
 </script>
