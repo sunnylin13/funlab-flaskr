@@ -135,7 +135,7 @@ class FunlabFlask(_FlaskBase):
         def stream_events(event_type):
             user_id = current_user.id
             stream_id = self.event_manager.register_user_stream(user_id)
-
+            self.mylogger.info(f"Client connected: user_id={user_id}, stream_id={stream_id}")
             def event_stream():
                 user_stream = self.event_manager.connection_manager.user_connections[user_id][stream_id]
                 try:
@@ -146,15 +146,9 @@ class FunlabFlask(_FlaskBase):
                                 sse = event.sse_format()
                                 self.mylogger.info(f"Event stream: {sse}")
                                 yield sse
-
                         except queue.Empty:
                             # Send a heartbeat if no event is received within the timeout
                             yield f"event: heartbeat\ndata: heartbeat\n\n"
-                            # time.sleep(3)  # Sleep for a short period to avoid busy-waiting
-                            # data = json.dumps({'title': 'Task', 'message': 'Task is completed'})
-                            # sse =  f"event: SystemNotification\ndata: {data}\n\n"
-                            # self.mylogger.info(f"Event stream: {sse}")
-                            # yield sse
                             time.sleep(1)  # Sleep for a short period to avoid busy-waiting
                 except GeneratorExit:
                     self.mylogger.info(f"Client disconnected: user_id={user_id}, stream_id={stream_id}")
@@ -165,7 +159,7 @@ class FunlabFlask(_FlaskBase):
                     raise e
 
             response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
-            response.headers['X-Stream-ID'] = stream_id
+            # response.headers['X-Stream-ID'] = stream_id
             return response
 
         @self.blueprint.route('/unregister_stream', methods=['POST'])
