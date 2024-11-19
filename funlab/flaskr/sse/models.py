@@ -194,29 +194,4 @@ class SystemNotificationEvent(EventBase):
                  **payload_kwargs):
         super().__init__(target_userid=target_userid, priority=priority, expired_at=expired_at, **payload_kwargs)
 
-class TaskCompletedPayload(PayloadBase):
-    task_name: str
-    task_result: str
-    task_start_time: datetime
-    task_end_time: datetime
-
-class TaskCompletedEvent(EventBase):
-    event_type = 'task_completed'
-    payload: TaskCompletedPayload
-
-    def __init__(self, task_name: str, task_result: str, task_start_time: datetime, task_end_time: datetime,
-                 target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, is_read: bool = False,
-                 created_at: datetime = datetime.now(timezone.utc), expired_at: datetime = None):
-        self.payload = TaskCompletedPayload(task_name=task_name, task_result=task_result, task_start_time=task_start_time, task_end_time=task_end_time)
-        self.target_userid = target_userid
-        self.priority = priority
-        self.is_read = is_read
-        self.created_at = created_at
-        self.expired_at = expired_at
-
-    def __str__(self):
-        return f"TaskCompletedEvent(task_name={self.payload.task_name}, task_result={self.payload.task_result}, task_start_time={self.payload.task_start_time}, task_end_time={self.payload.task_end_time}, target_userid={self.target_userid}, priority={self.priority}, is_read={self.is_read}, created_at={self.created_at}, expired_at={self.expired_at})"
-
-    def __repr__(self):
-        return self.__str__()
 
