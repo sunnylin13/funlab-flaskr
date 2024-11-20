@@ -2,10 +2,8 @@ import logging
 import queue
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Set
-from flask import Flask
+import uuid
 from funlab.core.dbmgr import DbMgr
-from funlab.flaskr.sse.utils import Metrics
 from funlab.utils import log
 from sqlalchemy import select
 
@@ -14,14 +12,7 @@ import queue
 import threading
 import time
 from collections import defaultdict
-from typing import Dict, Set
-
-import threading
-import queue
-import uuid
-from collections import defaultdict
-from typing import Dict, Set
-
+from typing import Dict
 class ConnectionManager:
     def __init__(self, max_connections_per_user: int):
         self.max_connections = max_connections_per_user
