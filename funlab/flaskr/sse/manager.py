@@ -17,13 +17,14 @@ class ConnectionManager:
     def __init__(self, max_connections_per_user: int):
         self.max_connections = max_connections_per_user
         self.user_connections: Dict[int, Dict[str, queue.Queue]] = defaultdict(dict)
+        self.eventtype_connection_users: Dict[str, set[int]] = defaultdict(set)
         self.users_connect_time: Dict[str, float] = {}
         self._lock = threading.Lock()
 
     def _generate_stream_id(self) -> str:
         return str(uuid.uuid4())
 
-    def add_connection(self, user_id: int, stream: queue.Queue) -> str:
+    def add_connection(self, user_id: int, stream: queue.Queue, event_type:str) -> str:
         with self._lock:
             if len(self.user_connections[user_id]) >= self.max_connections:
                 # Remove oldest connection
@@ -31,30 +32,41 @@ class ConnectionManager:
                     self.user_connections[user_id],
                     key=lambda sid: self.users_connect_time.get(sid, 0)
                 )
-                self.remove_connection(user_id, oldest_stream_id)
+                self.remove_connection(user_id, oldest_stream_id, event_type)
 
             stream_id = self._generate_stream_id()
             self.user_connections[user_id][stream_id] = stream
             self.users_connect_time[stream_id] = time.time()
+            self.eventtype_connection_users[event_type].add(user_id)
             return stream_id
 
-    def remove_connection(self, user_id: int, stream_id: str):
+    def remove_connection(self, user_id: int, stream_id: str, event_type:str):
         with self._lock:
             if stream_id in self.user_connections[user_id]:
                 del self.user_connections[user_id][stream_id]
                 self.users_connect_time.pop(stream_id, None)
-
+            
             if not self.user_connections[user_id]:
                 del self.user_connections[user_id]
+                if user_id in self.eventtype_connection_users[event_type]:
+                    self.eventtype_connection_users[event_type].remove(user_id)
 
     def get_user_streams(self, user_id: int) -> set[queue.Queue]: # Dict[str, queue.Queue]:
-        return set(self.user_connections.get(user_id, {}).values())
+        with self._lock:
+            streams = set(self.user_connections.get(user_id, {}).values())
+        return streams
 
     def get_all_streams(self) -> set[queue.Queue]:
         all_streams = set()
-        for streams in self.user_connections.values():
-            all_streams.update(streams.values())
+        with self._lock:
+            for streams in self.user_connections.values():
+                all_streams.update(streams.values())
         return all_streams
+    
+    def get_eventtype_users(self, event_type:str) -> set[int]:
+        with self._lock:
+            users = self.eventtype_connection_users.get(event_type, set())
+        return users
 
 class EventManager:
     _event_classes: Dict[str, type[EventBase]] = {}
@@ -185,13 +197,13 @@ class EventManager:
         distributor_thread.start()
         return distributor_thread
 
-    def register_user_stream(self, user_id: int) -> queue.Queue[EventBase]:
+    def register_user_stream(self, user_id: int, event_type) -> queue.Queue[EventBase]:
         stream = queue.Queue(maxsize=self.max_events_per_stream)
-        if stream_id:=self.connection_manager.add_connection(user_id, stream):
+        if stream_id:=self.connection_manager.add_connection(user_id, stream, event_type):
             return stream_id
         return None
 
-    def unregister_user_stream(self, user_id: int, stream_id: str):
-        self.connection_manager.remove_connection(user_id, stream_id)
+    def unregister_user_stream(self, user_id: int, stream_id: str, event_type:str):
+        self.connection_manager.remove_connection(user_id, stream_id, event_type)
 
 
