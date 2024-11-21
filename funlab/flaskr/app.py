@@ -132,42 +132,36 @@ class FunlabFlask(_FlaskBase):
         @login_required
         def stream_events(event_type):
             user_id = current_user.id
-            stream_id = self.event_manager.register_user_stream(user_id)
-            self.mylogger.info(f"Client connected: user_id={user_id}, stream_id={stream_id}")
+            stream_id = self.event_manager.register_user_stream(user_id, event_type)
+            self.mylogger.info(f"Client connected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
             def event_stream():
                 user_stream = self.event_manager.connection_manager.user_connections[user_id][stream_id]
+                # todo: SystemNotificationEvent會在每一頁面註冊一個的stream_id, 重新refresh都會, 在只沒有其它event時, 
+                # 舊的stream_id會因GeneratorExit而被移除, 但當有其它event時, 如UpdataQuote, 就不會有GeneratorExit, 造成會一直保留, 這樣會造成一直增加
+                # 網頁關掉, SystemNotificationEvent也沒有被移除? 
                 try:
                     while True:
                         try:
                             event:EventBase = user_stream.get(timeout=10)  # Wait for an event or timeout
                             if event.event_type == event_type:
                                 sse = event.sse_format()
-                                self.mylogger.info(f"Event stream: {sse}")
+                                # self.mylogger.info(f"Event stream: {sse}")
                                 yield sse
                         except queue.Empty:
                             # Send a heartbeat if no event is received within the timeout
                             yield f"event: heartbeat\ndata: heartbeat\n\n"
                             time.sleep(1)  # Sleep for a short period to avoid busy-waiting
                 except GeneratorExit:
-                    self.mylogger.info(f"Client disconnected: user_id={user_id}, stream_id={stream_id}")
-                    self.event_manager.unregister_user_stream(user_id, stream_id)
+                    self.mylogger.info(f"Client disconnected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
+                    self.event_manager.unregister_user_stream(user_id, stream_id, event_type)
                 except Exception as e:
-                    self.mylogger.error(f"Event stream exited, error: {e}")
-                    self.event_manager.unregister_user_stream(user_id, stream_id)
+                    self.mylogger.error(f"Event stream error and exited:user_id={user_id}, stream_id={stream_id}, event_type={event_type}, error: {e}")
+                    self.event_manager.unregister_user_stream(user_id, stream_id, event_type)
                     raise e
 
             response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
             # response.headers['X-Stream-ID'] = stream_id
             return response
-
-        @self.blueprint.route('/unregister_stream', methods=['POST'])
-        def unregister_stream(user_id):
-            user_id = current_user.id
-            stream_id = request.form.get('stream_id')
-            # user_stream = self.event_manager.get_user_streams(user_id)
-            if stream_id:
-                self.event_manager.unregister_user_stream(user_id, stream_id)
-            return '', 204
 
         @self.errorhandler(403)
         def access_deny_error(error):
