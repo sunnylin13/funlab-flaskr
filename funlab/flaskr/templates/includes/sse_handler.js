@@ -2,7 +2,7 @@
 function subscribeToEvent(eventType, renderFunction) {
     // Create a new EventSource instance to connect to the SSE endpoint
     const eventSource = new EventSource(`/sse/${eventType}`);
-    console.log("sbucribeToEvent called with eventType:", eventType);
+    //console.log("sbucribeToEvent called with eventType:", eventType);
     // Add event listener for eventType, e.g. 'SystemNotification' events
     eventSource.addEventListener(eventType, function(event) {
         console.log('SSE message received:', event);
@@ -14,7 +14,7 @@ function subscribeToEvent(eventType, renderFunction) {
     // eventSource.onmessage = function(event) {
     //     if (event.data === "heartbeat") {
     //         console.log("Received heartbeat");
-    //         return; 
+    //         return;
     //     }
     //     console.log("Received event data:", event.data);
     //     const data = JSON.parse(event.data);
