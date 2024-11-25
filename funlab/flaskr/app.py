@@ -1,20 +1,12 @@
 from __future__ import annotations
 import argparse
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import queue
 import time
-from enum import Enum
-from typing import TYPE_CHECKING, Optional
 
 from funlab.flaskr.sse.manager import EventManager
-from funlab.flaskr.sse.models import EventBase, EventPriority, PayloadBase, SystemNotificationEvent, SystemNotificationPayload
-if TYPE_CHECKING:
-    from enum import EnumMeta
+from funlab.flaskr.sse.models import EventBase, EventPriority, SystemNotificationEvent
 from http.client import HTTPException
-import json
 from pathlib import Path
-from queue import Queue
 import traceback
 
 from flask import (Blueprint, Flask, Response, g, jsonify, redirect, render_template, request, stream_with_context, url_for)
@@ -28,6 +20,7 @@ from funlab.utils import vars2env
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
+        self.app:FunlabFlask
         EventManager.register_event(SystemNotificationEvent)
         self.event_manager = EventManager(self.dbmgr)
 
@@ -41,14 +34,10 @@ class FunlabFlask(_FlaskBase):
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
-    def _get_all_user_id(self):
-        # todo get all user id
-        return []
-
     def send_all_users_system_notification(self, title:str, message:str,
                     priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
-        # todo get all user id and send one by one
-        for target_userid in self._get_all_user_id():
+        online_user_ids = self.app.event_manager.connection_manager.get_eventtype_users(event_type="SystemNotification")
+        for target_userid in online_user_ids:
             self.app.event_manager.create_event(event_type="SystemNotification",
                     target_userid=target_userid, priority=priority,
                     expire_after=expire_after, title=title, message=message)
@@ -136,9 +125,6 @@ class FunlabFlask(_FlaskBase):
             self.mylogger.info(f"Client connected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
             def event_stream():
                 user_stream = self.event_manager.connection_manager.user_connections[user_id][stream_id]
-                # todo: SystemNotificationEvent會在每一頁面註冊一個的stream_id, 重新refresh都會, 在只沒有其它event時, 
-                # 舊的stream_id會因GeneratorExit而被移除, 但當有其它event時, 如UpdataQuote, 就不會有GeneratorExit, 造成會一直保留, 這樣會造成一直增加
-                # 網頁關掉, SystemNotificationEvent也沒有被移除? 
                 try:
                     while True:
                         try:
