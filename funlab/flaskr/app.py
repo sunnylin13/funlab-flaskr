@@ -102,20 +102,20 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
-        @self.blueprint.route('/ssetest')
-        def ssetest():
-            return render_template('ssetest.html')
+        # @self.blueprint.route('/ssetest')
+        # def ssetest():
+        #     return render_template('ssetest.html')
 
-        # Add this route to your blueprint
-        @self.blueprint.route('/generate_notification', methods=['POST'])
-        @login_required
-        def generate_notification():
-            title = request.form.get('title', 'Test Notification')
-            message = request.form.get('message', 'This is a test notification.')
-            priority = EventPriority.NORMAL  # You can change this as needed
-            expire_after = 5  # Expire after 5 minutes, you can change this as needed
-            event = self.send_user_system_notification(title, message, current_user.id, priority, expire_after)
-            return jsonify({"status": "success", "event_id": event.id}), 201
+        # # Add this route to your blueprint
+        # @self.blueprint.route('/generate_notification', methods=['POST'])
+        # @login_required
+        # def generate_notification():
+        #     title = request.form.get('title', 'Test Notification')
+        #     message = request.form.get('message', 'This is a test notification.')
+        #     priority = EventPriority.NORMAL  # You can change this as needed
+        #     expire_after = 5  # Expire after 5 minutes, you can change this as needed
+        #     event = self.send_user_system_notification(title, message, current_user.id, priority, expire_after)
+        #     return jsonify({"status": "success", "event_id": event.id}), 201
 
         @self.blueprint.route('/sse/<event_type>')
         @login_required
