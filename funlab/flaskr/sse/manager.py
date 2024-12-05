@@ -193,7 +193,7 @@ class EventManager:
                 except Exception as e:
                     self.mylogger.error(f"Event distribution error: {e}")
 
-        distributor_thread = threading.Thread(target=distributor, daemon=True)
+        distributor_thread = threading.Thread(name='event_distributer', target=distributor, daemon=True)
         distributor_thread.start()
         return distributor_thread
 
