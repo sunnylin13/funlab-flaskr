@@ -1,4 +1,5 @@
 # 013 self stuff
+*.pfx
 *-py3-none-any/
 *-py3-none-any.*
 .data/
