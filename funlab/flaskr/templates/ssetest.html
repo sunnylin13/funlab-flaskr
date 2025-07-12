@@ -4,72 +4,202 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSE Test</title>
+    <style>
+        .notification {
+            border: 1px solid #ccc;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .notification.high-priority {
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .notification-actions {
+            margin-top: 10px;
+        }
+        .notification-actions button {
+            margin-right: 10px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .mark-read-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .remove-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
 </head>
 <body>
-    <h1>System Notifications</h1>
-    <div id="SystemNotification"></div>
+    <h1>SSE 測試頁面</h1>
+
+    <div id="connection-status">連線狀態: 未連線</div>
+
+    <h2>發送測試通知</h2>
     <form id="notificationForm">
-        <label for="title">Title:</label>
-        <input type="text" id="title" name="title" value="Test Notification">
-        <br>
-        <label for="message">Message:</label>
-        <input type="text" id="message" name="message" value="This is a test notification.">
-        <br>
-        <button type="submit">Send Notification</button>
+        <label for="title">標題:</label>
+        <input type="text" id="title" name="title" value="測試通知">
+        <br><br>
+
+        <label for="message">訊息:</label>
+        <input type="text" id="message" name="message" value="這是一個測試通知訊息。">
+        <br><br>
+
+        <label for="priority">優先級:</label>
+        <select id="priority" name="priority">
+            <option value="LOW">低</option>
+            <option value="NORMAL" selected>一般</option>
+            <option value="HIGH">高</option>
+            <option value="CRITICAL">緊急</option>
+        </select>
+        <br><br>
+
+        <button type="submit">發送通知</button>
     </form>
+
+    <h2>接收到的通知</h2>
+    <div id="SystemNotification"></div>
+
+    <script src="/static/js/sse_client.js"></script>
     <script>
-        function subscribeToEvent(eventType, renderFunction) {
-            const eventSource = new EventSource(`/sse/${eventType}`);
+        const statusElement = document.getElementById('connection-status');
+        const processedEventIds = new Set(); // 記錄已處理的事件 ID
 
-            eventSource.addEventListener(eventType, function(event) {
-                console.log('SSE message received:', event);
-                const data = JSON.parse(event.data);
-                renderNotification(data, eventType);
-            });
+        function renderNotification(data, eventType) {
+            console.log('SSE 測試頁面收到通知:', data);
 
-            eventSource.onerror = function(event) {
-                console.error("SSE connection error:", event);
-            };
-
-            window.addEventListener('beforeunload', function() {
-                eventSource.close();
-            });
-
-            eventSource.onopen = function(event) {
-                console.log('SSE connection opened:', event);
-            };
-
-            // Log messages and render notifications
-            // eventSource.onmessage = function(event) {
-            //     console.log('SSE message received:', event);
-            //     const data = JSON.parse(event.data);
-            //     renderFunction(data, eventType);
-            // };
-        }
-
-        function renderNotification(data, elementId) {
-            const notificationDiv = document.getElementById(elementId);
+            const notificationDiv = document.getElementById('SystemNotification');
             const notification = document.createElement('div');
-            notification.innerHTML = `<strong>${data.title}</strong>: ${data.message}`;
-            notificationDiv.appendChild(notification);
+            notification.className = 'notification';
+            notification.dataset.eventId = data.id;
+
+            if (data.priority === 'HIGH' || data.priority === 'CRITICAL') {
+                notification.classList.add('high-priority');
+            }
+
+            notification.innerHTML = `
+                <div>
+                    <strong>ID:</strong> ${data.id || 'N/A'}<br>
+                    <strong>標題:</strong> ${data.title}<br>
+                    <strong>訊息:</strong> ${data.message}<br>
+                    <strong>優先級:</strong> ${data.priority || 'NORMAL'}<br>
+                    <strong>時間:</strong> ${data.created_at ? new Date(data.created_at).toLocaleString() : new Date().toLocaleString()}<br>
+                    <strong>事件類型:</strong> ${data.event_type || eventType}<br>
+                    <strong>原始數據:</strong> <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+                <div class="notification-actions">
+                    <button class="mark-read-btn" onclick="markAsRead(${data.id})">標記已讀</button>
+                    <button class="remove-btn" onclick="removeNotification(this)">移除</button>
+                </div>
+            `;
+
+            notificationDiv.insertBefore(notification, notificationDiv.firstChild);
         }
 
-        console.log("Subscribing to SystemNotification events");
-        subscribeToEvent('SystemNotification', renderNotification);
+        function markAsRead(eventId) {
+            console.log('測試頁面：準備標記為已讀，事件 ID:', eventId);
+            
+            if (!eventId) {
+                console.error('測試頁面：無效的事件 ID');
+                alert('無效的事件 ID');
+                return;
+            }
 
+            sseClient.markEventRead(eventId)
+                .then(response => {
+                    console.log('測試頁面：已標記為已讀:', response);
+                    alert(`事件 ${eventId} 已標記為已讀`);
+                    
+                    // 在 UI 上標記為已讀
+                    const notification = document.querySelector(`[data-event-id="${eventId}"]`);
+                    if (notification) {
+                        notification.style.opacity = '0.6';
+                        notification.querySelector('.mark-read-btn').disabled = true;
+                        notification.querySelector('.mark-read-btn').textContent = '已讀';
+                    }
+                })
+                .catch(error => {
+                    console.error('測試頁面：標記已讀失敗:', error);
+                    alert(`標記已讀失敗: ${error.message}`);
+                });
+        }
+
+        function removeNotification(button) {
+            const notification = button.closest('.notification');
+            const eventId = notification.dataset.eventId;
+
+            if (eventId) {
+                markAsRead(eventId);
+                // 從已處理清單中移除，以便之後重新處理（如果需要）
+                processedEventIds.delete(parseInt(eventId));
+            }
+
+            notification.remove();
+        }
+
+        // 初始化 SSE 連線
+        console.log("建立 SystemNotification 事件訂閱");
+
+        // 監聽連線狀態 - 修改原有的 subscribe 方法以避免重複訂閱
+        let isSubscribed = false;
+        
+        function initializeSSEConnection() {
+            if (isSubscribed) {
+                console.log('Already subscribed to SSE events');
+                return;
+            }
+            
+            const eventSource = sseClient.subscribe('SystemNotification', renderNotification);
+            
+            eventSource.onopen = function() {
+                statusElement.textContent = '連線狀態: 已連線';
+                statusElement.style.color = 'green';
+                isSubscribed = true;
+            };
+
+            eventSource.onerror = function(error) {
+                statusElement.textContent = '連線狀態: 連線錯誤';
+                statusElement.style.color = 'red';
+                isSubscribed = false;
+            };
+
+            eventSource.onclose = function() {
+                statusElement.textContent = '連線狀態: 連線關閉';
+                statusElement.style.color = 'orange';
+                isSubscribed = false;
+            };
+        }
+        
+        // 初始化連線
+        initializeSSEConnection();
+
+        // 處理發送通知表單
         document.getElementById('notificationForm').addEventListener('submit', function(event) {
             event.preventDefault();
             const formData = new FormData(event.target);
+
             fetch('/generate_notification', {
                 method: 'POST',
                 body: formData
             })
             .then(response => response.json())
             .then(data => {
-                console.log('Notification sent:', data);
+                console.log('通知已發送:', data);
+                if (data.status === 'success') {
+                    alert('通知發送成功！');
+                } else {
+                    alert('通知發送失敗: ' + data.message);
+                }
             })
             .catch(error => {
-                console.error('Error sending notification:', error);
+                console.error('發送通知時發生錯誤:', error);
+                alert('發送通知時發生錯誤');
             });
         });
     </script>

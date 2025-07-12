@@ -36,6 +36,69 @@
         margin-bottom: 1px;
         /* Adjust this value as per your requirement */
     }
+
+    /* 改善通知徽章樣式 */
+    #notification-badge {
+        background-color: #dc3545 !important;
+        /* 使用紅色背景 */
+        color: #ffffff !important;
+        /* 白色文字確保對比度 */
+        font-size: 0.75rem !important;
+        /* 調整字體大小 */
+        border-radius: 50% !important;
+        /* 圓形徽章 */
+        display: inline-flex !important;
+        /* 使用 inline-flex 布局 */
+        align-items: center !important;
+        /* 垂直置中 */
+        justify-content: center !important;
+        /* 水平置中 */
+        line-height: 1 !important;
+        /* 調整行高 */
+        position: absolute !important;
+        /* 絕對定位 */
+        /*top: -5px !important;  向上偏移 */
+        /*right: -5px !important; 向右偏移 */
+        padding: 2px 6px !important;
+        /* 內邊距確保圓形 */
+        /* 只有在有內容時才顯示最小尺寸 */
+        min-width: 15px !important;
+        min-height: 15px !important;
+    }
+
+    /* 當徽章隱藏時，確保不佔用空間 */
+    #notification-badge.d-none {
+        display: none !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* 確保通知圖標容器有相對定位 */
+    .nav-item.dropdown .nav-link {
+        position: relative !important;
+    }
+
+    /* 讓通知列表更緊湊 */
+    #SystemNotification .list-group-item {
+        padding-top: 0.4rem;
+        padding-bottom: 0.4rem;
+    }
+
+    /* 為通知列表添加滾動條 */
+    #SystemNotification {
+        max-height: 400px;
+        /* 您可以根據需要調整此數值 */
+        overflow-y: auto;
+    }
+
+    /* "Clear All" 按鈕樣式 */
+    .dropdown-footer {
+        padding: 0.5rem 1rem;
+        text-align: center;
+        border-top: 1px solid var(--tblr-border-color);
+        background-color: var(--tblr-bg-surface);
+    }
 </style>
 <!-- Navbar overlap layout -->
 <header class="navbar navbar-expand-md sticky-top">
@@ -48,7 +111,7 @@
         {% if layout=='horizontal' %}
         <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
             <a href=".">
-              <img src="{{ config.APP_LOGO }}" height="20" alt="{{ config.APP_NAME }}" class="navbar-brand-image">
+                <img src="{{ config.APP_LOGO }}" height="20" alt="{{ config.APP_NAME }}" class="navbar-brand-image">
             </a>
         </h1>
         {% endif %}
@@ -73,7 +136,7 @@
             <!-- Layout -->
             <div class="nav-item dropdown d-none d-md-flex">
                 {% if layout=='horizontal' %}
-                <a href="?layout=vertical" id="toggleLink" class="nav-link p-0" title="Toggle Vertical layout"
+                <a href="?layout=vertical" id="toggleLinkVertical" class="nav-link p-0" title="Toggle Vertical layout"
                     data-bs-toggle="tooltip" data-bs-placement="bottom">
                     <!-- <img id="toggleIcon" src="/static/projects/layout-navbar.svg" width="24" height="24">
                 -->
@@ -89,7 +152,7 @@
                     </svg>
                 </a>
                 {% else %}
-                <a href="?layout=horizontal" id="toggleLink" class="nav-link p-0" title="Toggle Horizontal layout"
+                <a href="?layout=horizontal" id="toggleLinkHorizontal" class="nav-link p-0" title="Toggle Horizontal layout"
                     data-bs-toggle="tooltip" data-bs-placement="bottom">
                     <!-- <img id="toggleIcon" src="/static/projects/layout-navbar.svg" width="24" height="24"> -->
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-layout-navbar"
@@ -142,15 +205,14 @@
                             d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" />
                         <path d="M9 17v1a3 3 0 0 0 6 0v-1" />
                     </svg>
-                    {% if notifications %}
-                    <span class="badge bg-red"></span>
-                    {% endif %}
+                    <span id="notification-badge" class="badge bg-red d-none"></span>
                 </a>
-                <div class="dropdown-menu dropdown-menu-arrow dropdown-menu-end dropdown-menu-card">
-                    <div class="card">
-                        <div id="SystemNotification" class="list-group list-group-flush list-group-hoverable">
-                            <!-- Notifications will be dynamically added here -->
-                        </div>
+                <div class="dropdown-menu dropdown-menu-arrow dropdown-menu-end">
+                    <div id="SystemNotification" class="list-group list-group-flush list-group-hoverable">
+                        <!-- Notifications will be dynamically added here by SSE -->
+                    </div>
+                    <div id="notification-footer" class="dropdown-footer d-none">
+                        <a href="#" onclick="handleClearAllNotifications(event)">Clear all notifications</a>
                     </div>
                 </div>
             </div>
@@ -158,7 +220,9 @@
             <div class="nav-item dropdown">
                 <a href="#" class="nav-link d-flex lh-1 text-reset p-3" data-bs-toggle="dropdown"
                     aria-label="Open user menu">
-                    <img id="user_avatar" class="avatar avatar-sm" src="{{ current_user.avatar_url|default('/static/nobody.svg', true) }}">
+                    <img id="user_avatar" class="avatar avatar-sm"
+                        src="{{ current_user.avatar_url|default('/static/nobody.svg', true) }}"
+                        alt="User avatar">
                     <div class="d-none d-xl-block ps-2">
                         <div>{{ current_user.username }}
                             {% if current_user.is_admin %}
@@ -187,4 +251,3 @@
         {% endif %}
     </div>
 </header>
-

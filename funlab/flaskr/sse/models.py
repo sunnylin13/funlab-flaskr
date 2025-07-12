@@ -51,16 +51,22 @@ class EventBase(_Readable):
     target_userid: int
     priority: EventPriority = EventPriority.NORMAL
     is_read: bool = field(init=False, default=False)  # 記錄對各別user該event是否已讀
+    is_recovered: bool = field(init=False, default=False) # 標記此事件是否為恢復的事件
     created_at: datetime = field(init=False, default=datetime.now(timezone.utc))
     expired_at: datetime = None
 
     def __init__(self, target_userid: int = None, priority: EventPriority = EventPriority.NORMAL, expired_at: datetime = None,
-                 **payload_kwargs):
+                 payload: PayloadBase = None, **payload_kwargs):
+        self.id = None
         self.event_type = self.__class__.__name__.removesuffix('Event')
-        self.payload = self.__annotations__['payload'](**payload_kwargs)
+        if payload:
+            self.payload = payload
+        else:
+            self.payload = self.__annotations__['payload'](**payload_kwargs)
         self.target_userid = target_userid
         self.priority = priority
         self.is_read = False
+        self.is_recovered = False
         self.created_at = datetime.now(timezone.utc)
         self.expired_at = expired_at
 
@@ -112,21 +118,35 @@ class EventBase(_Readable):
             # 若event entity已read or expired就不再轉成event去發送, raise exception避免邏輯錯誤
             # raise ValueError("Should create event object from read or expired EventEntity")
             return None
+        
+        payload_obj = cls.__annotations__['payload'].from_jsonstr(entity.payload)
+
         event = cls(
             target_userid=entity.target_userid,
             priority=entity.priority,
             expired_at=entity.expired_at,
-            **ast.literal_eval(entity.payload) if isinstance(entity.payload, str) else entity.payload.__dict__
+            payload=payload_obj
         )
         event.id = entity.id
-        event.payload = cls.__annotations__['payload'].from_jsonstr(entity.payload)
         event.is_read = entity.is_read
         event.created_at = entity.created_at
         return event
 
     def sse_format(self):
         """ Format the event object as a Server-Sent Event. """
+        # 此方法已過時，請改用 to_dict()
         return f"event: {self.event_type}\ndata: {self.payload.to_json()}\n\n"
+
+    def to_dict(self):
+        """將事件物件序列化為字典，以便發送到客戶端"""
+        return {
+            "id": self.id,
+            "event_type": self.event_type,
+            "priority": self.priority.name,
+            "created_at": self.created_at.isoformat(),
+            "payload": self.payload.__dict__ if self.payload else {},
+            "is_recovered": self.is_recovered
+        }
 
 @entities_registry.mapped
 @dataclass
@@ -148,8 +168,9 @@ class EventEntity(EventBase):
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), metadata={'sa': Column(DateTime(timezone=True), nullable=False)})
     expired_at: datetime = field(default=None, metadata={'sa': Column(DateTime(timezone=True), nullable=True)})
 
-    def post_init(self):
-        self.payload = self.__annotations__['payload'].from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
+    # post_init 已不再需要，因為 payload 在 from_entity 中處理
+    # def post_init(self):
+    #     self.payload = self.__annotations__['payload'].from_jsonstr(self.payload) if isinstance(self.payload, str) else self.payload # Convert payload from JSON string to object
 
     # def is_users_read(self, user_ids: list[int]) -> bool:
     #     """應用於傳入系統所有的user_ids, 若都已讀, 則應自db中刪除此event entity"""

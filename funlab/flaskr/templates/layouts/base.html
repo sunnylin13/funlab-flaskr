@@ -118,6 +118,9 @@
 
   {% block javascripts %}
   {% endblock javascripts %}
+
+  {# Load and initialize SSE client for authenticated users #}
+  {{ sse_client_script|safe }}
 </body>
 
 </html>

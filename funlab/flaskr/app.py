@@ -102,51 +102,148 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
-        # @self.blueprint.route('/ssetest')
-        # def ssetest():
-        #     return render_template('ssetest.html')
+        @self.blueprint.route('/ssetest')
+        @login_required
+        def ssetest():
+            return render_template('ssetest.html')
 
         # # Add this route to your blueprint
-        # @self.blueprint.route('/generate_notification', methods=['POST'])
-        # @login_required
-        # def generate_notification():
-        #     title = request.form.get('title', 'Test Notification')
-        #     message = request.form.get('message', 'This is a test notification.')
-        #     priority = EventPriority.NORMAL  # You can change this as needed
-        #     expire_after = 5  # Expire after 5 minutes, you can change this as needed
-        #     event = self.send_user_system_notification(title, message, current_user.id, priority, expire_after)
-        #     return jsonify({"status": "success", "event_id": event.id}), 201
+        @self.blueprint.route('/generate_notification', methods=['POST'])
+        @login_required
+        def generate_notification():
+            title = request.form.get('title', 'Test Notification')
+            message = request.form.get('message', 'This is a test notification.')
+            target_user = request.form.get('target_userid', None)
+            target_userid = int(target_user) if target_user else current_user.id
+            priority_level = request.form.get('priority', 'NORMAL')
+            priority = EventPriority[priority_level] if priority_level in EventPriority.__members__ else EventPriority.NORMAL
+            expire_after = request.form.get('expire_after', 5, type=int)
+
+            event = self.send_user_system_notification(
+                title=title,
+                message=message,
+                target_userid=target_userid,
+                priority=priority,
+                expire_after=expire_after
+            )
+
+            if event:
+                return jsonify({
+                    "status": "success",
+                    "event_id": event.id,
+                    "event_type": event.event_type,
+                    "created_at": event.created_at.isoformat()
+                }), 201
+            else:
+                return jsonify({"status": "error", "message": "Failed to create notification"}), 500
+
+        @self.blueprint.route('/mark_event_read/<int:event_id>', methods=['POST'])
+        @login_required
+        def mark_event_read(event_id):
+            """Mark an event as read by the current user"""
+            self.mylogger.debug(f"收到標記已讀請求：event_id={event_id}, user_id={current_user.id}")
+
+            try:
+                # Find the event in the database
+                with self.dbmgr.session_context() as session:
+                    from funlab.flaskr.sse.models import EventEntity
+                    event_entity = session.query(EventEntity).filter_by(
+                        id=event_id,
+                        target_userid=current_user.id
+                    ).first()
+
+                    if event_entity:
+                        self.mylogger.debug(f"找到事件：{event_entity.event_type}, 當前 is_read={event_entity.is_read}")
+
+                        if event_entity.is_read:
+                            self.mylogger.debug(f"事件 {event_id} 已經被標記為已讀")
+                            return jsonify({"status": "warning", "message": "Event already marked as read"}), 200
+
+                        event_entity.is_read = True
+                        session.commit()
+                        self.mylogger.debug(f"事件 {event_id} 已成功標記為已讀 by user {current_user.id}")
+                        return jsonify({"status": "success", "message": "Event marked as read"}), 200
+                    else:
+                        self.mylogger.warning(f"事件未找到或無權限：event_id={event_id}, user_id={current_user.id}")
+                        return jsonify({"status": "error", "message": "Event not found or access denied"}), 404
+
+            except Exception as e:
+                self.mylogger.error(f"標記事件 {event_id} 為已讀時發生錯誤: {e}")
+                return jsonify({"status": "error", "message": "Internal server error"}), 500
+
+        @self.blueprint.route('/mark_events_read', methods=['POST'])
+        @login_required
+        def mark_events_read():
+            """Mark multiple events as read by the current user."""
+            data = request.get_json()
+            event_ids = data.get('event_ids')
+
+            if not event_ids or not isinstance(event_ids, list):
+                return jsonify({"status": "error", "message": "Invalid or missing event_ids"}), 400
+
+            self.mylogger.debug(f"收到批量標記已讀請求：event_ids={event_ids}, user_id={current_user.id}")
+
+            try:
+                with self.dbmgr.session_context() as session:
+                    from funlab.flaskr.sse.models import EventEntity
+
+                    # Use 'in_' for an efficient batch update query
+                    updated_count = session.query(EventEntity).filter(
+                        EventEntity.id.in_(event_ids),
+                        EventEntity.target_userid == current_user.id,
+                        EventEntity.is_read == False
+                    ).update({'is_read': True}, synchronize_session=False)
+
+                    session.commit()
+
+                    self.mylogger.debug(f"成功將 {updated_count} 個事件標記為已讀 for user {current_user.id}")
+                    return jsonify({"status": "success", "message": f"{updated_count} events marked as read"}), 200
+
+            except Exception as e:
+                self.mylogger.error(f"批量標記事件為已讀時發生錯誤: {e}")
+                return jsonify({"status": "error", "message": "Internal server error"}), 500
 
         @self.blueprint.route('/sse/<event_type>')
         @login_required
         def stream_events(event_type):
             user_id = current_user.id
             stream_id = self.event_manager.register_user_stream(user_id, event_type)
-            self.mylogger.info(f"Client connected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
+            if not stream_id:
+                return Response("Max connections reached.", status=429)
+
+            # self.mylogger.debug(f"Client connected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
             def event_stream():
-                user_stream = self.event_manager.connection_manager.user_connections[user_id][stream_id]
                 try:
+                    # Safely get the stream queue
+                    user_streams = self.event_manager.connection_manager.user_connections.get(user_id, {})
+                    user_stream = user_streams.get(stream_id)
+
+                    if not user_stream:
+                        self.mylogger.warning(f"Stream {stream_id} not found for user {user_id} upon stream start.")
+                        return
+
                     while True:
                         try:
-                            event:EventBase = user_stream.get(timeout=10)  # Wait for an event or timeout
-                            if event.event_type == event_type:
-                                sse = event.sse_format()
-                                # self.mylogger.info(f"Event stream: {sse}")
-                                yield sse
+                            event: EventBase = user_stream.get(timeout=10)  # Wait for an event or timeout
+
+                            # 對於恢復的事件和即時事件使用統一的序列化
+                            event_data = event.to_dict()
+                            import json
+                            sse = f"event: {event.event_type}\ndata: {json.dumps(event_data)}\n\n"
+                            yield sse
                         except queue.Empty:
                             # Send a heartbeat if no event is received within the timeout
-                            yield f"event: heartbeat\ndata: heartbeat\n\n"
-                            time.sleep(1)  # Sleep for a short period to avoid busy-waiting
+                            yield f"event: heartbeat\ndata: {{\"status\": \"heartbeat\"}}\n\n"
                 except GeneratorExit:
-                    self.mylogger.info(f"Client disconnected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
-                    self.event_manager.unregister_user_stream(user_id, stream_id, event_type)
+                    # This block is executed when the client disconnects
+                    pass
                 except Exception as e:
-                    self.mylogger.error(f"Event stream error and exited:user_id={user_id}, stream_id={stream_id}, event_type={event_type}, error: {e}")
+                    self.mylogger.error(f"Event stream error for user_id={user_id}, stream_id={stream_id}: {e}")
+                finally:
+                    # self.mylogger.debug(f"Client disconnected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
                     self.event_manager.unregister_user_stream(user_id, stream_id, event_type)
-                    raise e
 
             response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
-            # response.headers['X-Stream-ID'] = stream_id
             return response
 
         @self.errorhandler(403)
@@ -218,8 +315,8 @@ def start_server(app:Flask):
             try:
                 from gevent import monkey
                 monkey.patch_all() # thread=False, select=False)  # for issue: https://github.com/gevent/gevent/issues/1016
-            # import gunicorn
-                from gunicorn.app.wsgiapp import WSGIApplication
+                # import gunicorn
+                from gunicorn.app.wsgiapp import WSGIApplication  # pylint: disable=import-error # ignore the warning: "No module named 'gunicorn.app.wsgiapp'"
             except ImportError as e:
                 raise Exception("If use gunicorn as WSGI server, please install needed packages: pip install gunicorn gevent") from e
             from funlab.flaskr.conf import gunicorn_conf
@@ -265,6 +362,12 @@ def main(args=None):
     parser.add_argument("-e", "--envfile", dest="envfile", default='.env', help="specify .env file name and path")
     args = parser.parse_args(args)
     configfile=args.configfile
+    envfile=args.envfile
+    start_server(create_app(configfile=configfile, envfile=envfile))
+
+import sys
+if __name__ == "__main__":
+    sys.exit(main())
     envfile=args.envfile
     start_server(create_app(configfile=configfile, envfile=envfile))
 
