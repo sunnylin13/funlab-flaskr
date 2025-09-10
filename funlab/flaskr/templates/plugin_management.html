@@ -1,0 +1,537 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}擴充功能管理 - {{ super() }}{% endblock %}
+
+{% block page_header %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-3">
+                <i class="fas fa-plug"></i>
+                擴充功能管理
+            </h1>
+            <p class="text-muted">管理和監控系統擴充功能狀態</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_body %}
+<div class="container-fluid">
+    <!-- 擴充功能統計概覽 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">總擴充功能數</h6>
+                            <h2 class="mb-0">{{ stats.get('total_plugins', 0) }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-puzzle-piece fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">已啟動</h6>
+                            <h2 class="mb-0">{{ stats.get('active_plugins', 0) }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">未載入</h6>
+                            <h2 class="mb-0">{{ stats.get('unloaded_plugins', 0) }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-hourglass-half fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">錯誤</h6>
+                            <h2 class="mb-0">{{ stats.get('error_plugins', 0) }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 管理操作 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-tools"></i>
+                        管理操作
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <button class="btn btn-warning mr-2" onclick="clearCache()">
+                                <i class="fas fa-trash"></i> 清除快取
+                            </button>
+                            <button class="btn btn-success mr-2" onclick="refreshData()">
+                                <i class="fas fa-sync"></i> 重新整理
+                            </button>
+                            <button class="btn btn-info mr-2" onclick="healthCheckAll()">
+                                <i class="fas fa-heartbeat"></i> 全體健康檢查
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="/home" class="btn btn-outline-primary">
+                                <i class="fas fa-home"></i> 回到首頁
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 擴充功能詳細列表 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list"></i>
+                        擴充功能詳細狀態
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="plugin-management-content">
+                        {% if stats.get('plugins') %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>擴充功能名稱</th>
+                                        <th>狀態</th>
+                                        <th>載入時間</th>
+                                        <th>最後訪問</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="plugins-table-body">
+                                    {% for name, info in stats.plugins.items() %}
+                                    <tr id="plugin-row-{{ name }}">
+                                        <td>
+                                            <strong>{{ name }}</strong>
+                                            {% if info.error_message %}
+                                            <br><small class="text-danger">{{ info.error_message }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if info.state == 'unloaded' %}
+                                                <span class="badge badge-secondary">未載入</span>
+                                            {% elif info.state == 'active' %}
+                                                <span class="badge badge-success">已啟動</span>
+                                            {% elif info.state == 'loaded' %}
+                                                <span class="badge badge-info">已載入</span>
+                                            {% elif info.state == 'loading' %}
+                                                <span class="badge badge-warning">載入中</span>
+                                            {% elif info.state == 'error' %}
+                                                <span class="badge badge-danger">錯誤</span>
+                                            {% else %}
+                                                <span class="badge badge-warning">{{ info.state }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if info.load_time %}
+                                                {{ "%.3f"|format(info.load_time) }}s
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {{ info.last_access_formatted }}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                {% if info.state == 'unloaded' %}
+                                                <button class="btn btn-outline-success" onclick="loadPlugin('{{ name }}')">
+                                                    <i class="fas fa-play"></i> 啟動
+                                                </button>
+                                                {% endif %}
+                                                <button class="btn btn-outline-primary" onclick="reloadPlugin('{{ name }}')">
+                                                    <i class="fas fa-redo"></i> 重載
+                                                </button>
+                                                <button class="btn btn-outline-success" onclick="healthCheck('{{ name }}')">
+                                                    <i class="fas fa-heartbeat"></i> 檢查
+                                                </button>
+                                                <button class="btn btn-outline-info" onclick="showMetrics('{{ name }}')">
+                                                    <i class="fas fa-chart-line"></i> 指標
+                                                </button>
+                                            </div>
+                                            <div id="metrics-{{ name }}" class="mt-2" style="display: none;">
+                                                <!-- 指標內容將在這裡顯示 -->
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">暫無擴充功能資訊</h5>
+                            <p class="text-muted">系統正在初始化或無可用擴充功能</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 實時更新狀態 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-clock"></i> 系統資訊
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>最後更新時間:</strong> <span id="last-update">{{ current_time }}</span></p>
+                            <p><strong>自動重新整理:</strong>
+                                <span id="auto-refresh-status" class="badge badge-secondary">已停用</span>
+                                <button id="toggle-auto-refresh" class="btn btn-sm btn-outline-primary ml-2" onclick="toggleAutoRefresh()">
+                                    <i class="fas fa-play"></i> 啟用
+                                </button>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>管理端點:</strong> /plugin-manager/api/</p>
+                            <p><strong>快取狀態:</strong> <span id="cache-status" class="badge badge-info">正常</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_body %}
+
+{% block javascripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 自動重新整理控制變數
+    let autoRefreshInterval = null;
+    let isAutoRefreshEnabled = false; // 預設為停用
+
+    function startAutoRefresh() {
+        if (autoRefreshInterval) return; // 已經啟用，避免重複
+        autoRefreshInterval = setInterval(refreshData, 30000); // 30秒
+        isAutoRefreshEnabled = true;
+        updateAutoRefreshUI();
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+        isAutoRefreshEnabled = false;
+        updateAutoRefreshUI();
+    }
+
+    function updateAutoRefreshUI() {
+        const statusElement = document.getElementById('auto-refresh-status');
+        const toggleButton = document.getElementById('toggle-auto-refresh');
+
+        if (isAutoRefreshEnabled) {
+            statusElement.className = 'badge badge-success';
+            statusElement.textContent = '已啟用 (30秒)';
+            toggleButton.innerHTML = '<i class="fas fa-pause"></i> 停用';
+            toggleButton.className = 'btn btn-sm btn-outline-danger ml-2';
+        } else {
+            statusElement.className = 'badge badge-secondary';
+            statusElement.textContent = '已停用';
+            toggleButton.innerHTML = '<i class="fas fa-play"></i> 啟用';
+            toggleButton.className = 'btn btn-sm btn-outline-primary ml-2';
+        }
+    }
+
+    // 全域函數：切換自動重新整理
+    window.toggleAutoRefresh = function() {
+        if (isAutoRefreshEnabled) {
+            stopAutoRefresh();
+        } else {
+            startAutoRefresh();
+        }
+    };
+
+    function refreshData() {
+        fetch('/plugin-manager/api/plugins')
+            .then(response => response.json())
+            .then(response => {
+                if (response.success) {
+                    updatePluginTable(response.data);
+                    updateLastUpdateTime();
+                } else {
+                    console.error('Error loading plugin data:', response.error);
+                }
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                const cacheStatus = document.getElementById('cache-status');
+                if (cacheStatus) {
+                    cacheStatus.className = 'badge badge-danger';
+                    cacheStatus.textContent = '連線錯誤';
+                }
+            });
+    }
+
+    function updatePluginTable(data) {
+        const tbody = document.getElementById('plugins-table-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+
+        if (data.plugins && Object.keys(data.plugins).length > 0) {
+            Object.entries(data.plugins).forEach(([name, info]) => {
+                const statusBadge = getStatusBadge(info.state);
+                const loadTime = info.load_time ? (info.load_time).toFixed(3) + 's' : '-';
+                const lastAccess = info.last_access ? new Date(info.last_access * 1000).toLocaleString() : '-';
+
+                const row = document.createElement('tr');
+                row.id = `plugin-row-${name}`;
+
+                let actionButtons = '';
+                if (info.state === 'unloaded') {
+                    actionButtons += `
+                        <button class="btn btn-outline-success btn-sm" onclick="loadPlugin('${name}')">
+                            <i class="fas fa-play"></i> 啟動
+                        </button>
+                    `;
+                }
+                actionButtons += `
+                    <button class="btn btn-outline-primary btn-sm" onclick="reloadPlugin('${name}')">
+                        <i class="fas fa-redo"></i> 重載
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" onclick="healthCheck('${name}')">
+                        <i class="fas fa-heartbeat"></i> 檢查
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="showMetrics('${name}')">
+                        <i class="fas fa-chart-line"></i> 指標
+                    </button>
+                `;
+
+                row.innerHTML = `
+                    <td>
+                        <strong>${name}</strong>
+                        ${info.error_message ? '<br><small class="text-danger">' + info.error_message + '</small>' : ''}
+                    </td>
+                    <td>${statusBadge}</td>
+                    <td>${loadTime}</td>
+                    <td>${lastAccess}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            ${actionButtons}
+                        </div>
+                        <div id="metrics-${name}" class="mt-2" style="display: none;"></div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        } else {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="5" class="text-center text-muted">暫無擴充功能資訊</td>';
+            tbody.appendChild(row);
+        }
+
+        // 更新統計數字
+        const totalElement = document.querySelector('.card.bg-primary .h2');
+        const activeElement = document.querySelector('.card.bg-success .h2');
+        const unloadedElement = document.querySelector('.card.bg-warning .h2');
+        const errorElement = document.querySelector('.card.bg-danger .h2');
+
+        if (totalElement) totalElement.textContent = data.total_plugins || 0;
+        if (activeElement) activeElement.textContent = data.active_plugins || 0;
+        if (unloadedElement) unloadedElement.textContent = data.unloaded_plugins || 0;
+        if (errorElement) errorElement.textContent = data.error_plugins || 0;
+    }
+
+    function getStatusBadge(state) {
+        const badges = {
+            'unloaded': '<span class="badge badge-secondary">未載入</span>',
+            'active': '<span class="badge badge-success">已啟動</span>',
+            'loaded': '<span class="badge badge-info">已載入</span>',
+            'loading': '<span class="badge badge-warning">載入中</span>',
+            'error': '<span class="badge badge-danger">錯誤</span>',
+            'disabled': '<span class="badge badge-dark">已停用</span>'
+        };
+        return badges[state] || `<span class="badge badge-warning">${state}</span>`;
+    }
+
+    function updateLastUpdateTime() {
+        const lastUpdate = document.getElementById('last-update');
+        const cacheStatus = document.getElementById('cache-status');
+
+        if (lastUpdate) lastUpdate.textContent = new Date().toLocaleString();
+        if (cacheStatus) {
+            cacheStatus.className = 'badge badge-info';
+            cacheStatus.textContent = '正常';
+        }
+    }
+
+    // 全域函數
+    window.loadPlugin = function(pluginName) {
+        if (!confirm(`確定要載入擴充功能 "${pluginName}" 嗎？`)) return;
+
+        fetch(`/plugin-manager/api/plugins/${pluginName}/load`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(response => {
+            alert(response.message);
+            if (response.success) {
+                refreshData();
+            }
+        })
+        .catch(error => {
+            alert('載入擴充功能時發生錯誤');
+        });
+    };
+
+    window.reloadPlugin = function(pluginName) {
+        if (!confirm(`確定要重新載入擴充功能 "${pluginName}" 嗎？`)) return;
+
+        fetch(`/plugin-manager/api/plugins/${pluginName}/reload`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(response => {
+            alert(response.message);
+            if (response.success) {
+                refreshData();
+            }
+        })
+        .catch(error => {
+            alert('重載擴充功能時發生錯誤');
+        });
+    };
+
+    window.healthCheck = function(pluginName) {
+        fetch(`/plugin-manager/api/plugins/${pluginName}/health`)
+        .then(response => response.json())
+        .then(response => {
+            if (response.success) {
+                const status = response.data.healthy ? '健康 ✅' : '不健康 ❌';
+                alert(`擴充功能 "${pluginName}" 狀態: ${status}`);
+            } else {
+                alert('健康檢查失敗: ' + response.error);
+            }
+        })
+        .catch(error => {
+            alert('健康檢查時發生錯誤');
+        });
+    };
+
+    window.showMetrics = function(pluginName) {
+        const metricsDiv = document.getElementById(`metrics-${pluginName}`);
+        if (!metricsDiv) return;
+
+        if (metricsDiv.style.display !== 'none') {
+            metricsDiv.style.display = 'none';
+            return;
+        }
+
+        fetch(`/plugin-manager/api/plugins/${pluginName}/metrics`)
+        .then(response => response.json())
+        .then(response => {
+            if (response.success && response.data.metrics) {
+                const metrics = response.data.metrics;
+                let html = '<div class="row">';
+
+                Object.entries(metrics).forEach(([key, value]) => {
+                    html += `
+                        <div class="col-md-4">
+                            <div class="small bg-light p-2 rounded">
+                                <strong>${key}:</strong> ${value}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+                metricsDiv.innerHTML = html;
+                metricsDiv.style.display = 'block';
+            } else {
+                metricsDiv.innerHTML = '<p class="text-muted small">暫無指標資料</p>';
+                metricsDiv.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            metricsDiv.innerHTML = '<p class="text-danger small">載入指標失敗</p>';
+            metricsDiv.style.display = 'block';
+        });
+    };
+
+    window.clearCache = function() {
+        if (!confirm('確定要清除擴充功能快取嗎？')) return;
+
+        fetch('/plugin-manager/api/cache/clear', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(response => {
+            alert(response.message);
+        })
+        .catch(error => {
+            alert('清除快取時發生錯誤');
+        });
+    };
+
+    window.healthCheckAll = function() {
+        alert('執行全體健康檢查...');
+        refreshData();
+    };
+
+    window.refreshData = refreshData;
+
+    // 初始化UI狀態
+    updateAutoRefreshUI();
+
+    // 頁面卸載時清理定時器
+    window.addEventListener('beforeunload', function() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+    });
+});
+</script>
+{% endblock javascripts %}
