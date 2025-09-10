@@ -16,7 +16,6 @@ from funlab.core.menu import MenuItem, MenuDivider
 from funlab.core.config import Config
 from funlab.core.appbase import _FlaskBase
 from funlab.utils import vars2env
-from funlab.flaskr.plugin_mgmt_view import PluginManagerView
 
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
@@ -24,9 +23,6 @@ class FunlabFlask(_FlaskBase):
         self.app:FunlabFlask
         EventManager.register_event(SystemNotificationEvent)
         self.event_manager = EventManager(self.dbmgr)
-
-        # ✅ 註冊內建的 PluginManagerView
-        self._register_plugin_manager_view()
 
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
@@ -59,17 +55,6 @@ class FunlabFlask(_FlaskBase):
             data = f.read()
         return data
 
-    def _register_plugin_manager_view(self):
-        """註冊內建的擴充功能管理視圖"""
-        try:
-            plugin_mgr_view = PluginManagerView(self)
-            # 註冊到應用中，使其可用
-            if hasattr(plugin_mgr_view, 'blueprint'):
-                self.register_blueprint(plugin_mgr_view.blueprint)
-            self.mylogger.info("PluginManagerView registered successfully")
-        except Exception as e:
-            self.mylogger.error(f"Failed to register PluginManagerView: {e}")
-
     def register_routes(self):
         self.blueprint = Blueprint(
             'root_bp',
@@ -83,35 +68,62 @@ class FunlabFlask(_FlaskBase):
             if current_user.is_authenticated:
                 return redirect(url_for('root_bp.home'))
             else:
-                # ✅ 強健的登入重定向處理
-                login_view = current_app.login_manager.login_view
-                print(f"DEBUG: login_view = {login_view}")  # 調試輸出
+                return redirect(url_for(self.login_manager.login_view))
 
-                # 嘗試多種方式確保重定向到登入頁面
-                try:
-                    # 方法1：嘗試使用配置的 login_view
-                    if login_view and login_view != 'root_bp.blank':
-                        login_url = url_for(login_view)
-                        print(f"DEBUG: Generated login_url = {login_url}")
-                        return redirect(login_url)
-                except Exception as e:
-                    print(f"DEBUG: url_for('{login_view}') failed: {e}")
-
-                # 方法2：直接嘗試訪問 auth_bp.login
-                try:
-                    auth_login_url = url_for('auth_bp.login')
-                    print(f"DEBUG: Direct auth_bp.login URL = {auth_login_url}")
-                    return redirect(auth_login_url)
-                except Exception as e:
-                    print(f"DEBUG: Direct auth_bp.login failed: {e}")
-
-                # 方法3：嘗試使用相對路徑 /login
-                print("DEBUG: Using fallback redirect to /login")
-                return redirect('/login')
+        # @self.blueprint.route('/blank')
+        # def blank():
+        #     return render_template('blank.html')
 
         @self.blueprint.route('/blank')
         def blank():
             return render_template('blank.html')
+
+        @self.blueprint.route('/debug')
+        def debug():
+            login_view = current_app.login_manager.login_view
+            return f"""
+            <h1>Debug Info</h1>
+            <p>Current login_view: {login_view}</p>
+            <p>Available routes:</p>
+            <ul>
+                {''.join([f'<li>{rule.endpoint}: {rule.rule}</li>' for rule in current_app.url_map.iter_rules() if 'login' in rule.endpoint or 'auth' in rule.endpoint])}
+            </ul>
+            <p><a href="/">Back to root</a></p>
+            """
+
+        @self.blueprint.route('/dashboard')
+        @login_required
+        def dashboard():
+            """擴充功能儀表板頁面 - 展示所有已載入的擴充功能和功能"""
+            # 收集擴充功能信息
+            plugin_info = []
+            for name, plugin in self.plugins.items():
+                info = {
+                    'name': name,
+                    'display_name': getattr(plugin, 'display_name', name.title()),
+                    'description': getattr(plugin, 'description', f'{name} 擴充功能'),
+                    'type': type(plugin).__name__,
+                    'blueprint': getattr(plugin, 'blueprint', None),
+                    'status': 'active',
+                    'version': getattr(plugin, 'version', '1.0.0')
+                }
+
+                # 獲取blueprint的路由信息
+                if info['blueprint']:
+                    info['url_prefix'] = info['blueprint'].url_prefix
+                    info['blueprint_name'] = info['blueprint'].name
+
+                plugin_info.append(info)
+
+            # 獲取擴充功能管理器統計
+            plugin_stats = {}
+            if hasattr(self, 'plugin_manager'):
+                plugin_stats = self.plugin_manager.get_plugin_stats()
+
+            return render_template('dashboard.html',
+                                 plugins=plugin_info,
+                                 stats=plugin_stats,
+                                 app_config=self.config)
 
         @self.blueprint.route('/home')
         @login_required
@@ -143,7 +155,6 @@ class FunlabFlask(_FlaskBase):
 
         @self.blueprint.route('/ssetest')
         @login_required
-        @admin_required
         def ssetest():
             return render_template('ssetest.html')
 
@@ -312,9 +323,9 @@ class FunlabFlask(_FlaskBase):
 
     def register_menu(self):
         self.append_usermenu([
-                        # MenuItem(title='Plugin Management',
-                        #     icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-plug" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 8l3 0" /><path d="M12 8l0 13" /><path d="M12 21l0 -13" /><path d="M8 4l0 4" /><path d="M16 4l0 4" /></svg>',
-                        #     href='/plugin-manager/management'),
+                        MenuItem(title='Dashboard',
+                            icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-dashboard" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 13m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M13.45 11.55l2.05 -2.05" /><path d="M6.4 20a9 9 0 1 1 11.2 0z" /></svg>',
+                            href='/dashboard'),
                         MenuDivider(),
                         MenuItem(title='Configuration',
                             icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-octagon-filled" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14.897 1a4 4 0 0 1 2.664 1.016l.165 .156l4.1 4.1a4 4 0 0 1 1.168 2.605l.006 .227v5.794a4 4 0 0 1 -1.016 2.664l-.156 .165l-4.1 4.1a4 4 0 0 1 -2.603 1.168l-.227 .006h-5.795a3.999 3.999 0 0 1 -2.664 -1.017l-.165 -.156l-4.1 -4.1a4 4 0 0 1 -1.168 -2.604l-.006 -.227v-5.794a4 4 0 0 1 1.016 -2.664l.156 -.165l4.1 -4.1a4 4 0 0 1 2.605 -1.168l.227 -.006h5.793zm-2.897 10h-1l-.117 .007a1 1 0 0 0 0 1.986l.117 .007v3l.007 .117a1 1 0 0 0 .876 .876l.117 .007h1l.117 -.007a1 1 0 0 0 .876 -.876l.007 -.117l-.007 -.117a1 1 0 0 0 -.764 -.857l-.112 -.02l-.117 -.006v-3l-.007 -.117a1 1 0 0 0 -.876 -.876l-.117 -.007zm.01 -3l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007z" stroke-width="0" fill="currentColor" /></svg>',
@@ -322,9 +333,9 @@ class FunlabFlask(_FlaskBase):
                         MenuItem(title='about',
                             icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-square-rounded" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>',
                             href='/about'),
-                        # MenuItem(title='ssetest',
-                        #     icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-square-rounded" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>',
-                        #     href='/ssetest'),
+                        MenuItem(title='ssetest',
+                            icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-square-rounded" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>',
+                            href='/ssetest'),
                         ])
 
 def create_app(configfile, envfile:str=None):
