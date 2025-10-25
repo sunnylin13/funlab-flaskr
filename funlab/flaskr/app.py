@@ -83,31 +83,9 @@ class FunlabFlask(_FlaskBase):
             if current_user.is_authenticated:
                 return redirect(url_for('root_bp.home'))
             else:
-                # ✅ 強健的登入重定向處理
-                login_view = current_app.login_manager.login_view
-                print(f"DEBUG: login_view = {login_view}")  # 調試輸出
-
-                # 嘗試多種方式確保重定向到登入頁面
-                try:
-                    # 方法1：嘗試使用配置的 login_view
-                    if login_view and login_view != 'root_bp.blank':
-                        login_url = url_for(login_view)
-                        print(f"DEBUG: Generated login_url = {login_url}")
-                        return redirect(login_url)
-                except Exception as e:
-                    print(f"DEBUG: url_for('{login_view}') failed: {e}")
-
-                # 方法2：直接嘗試訪問 auth_bp.login
-                try:
-                    auth_login_url = url_for('auth_bp.login')
-                    print(f"DEBUG: Direct auth_bp.login URL = {auth_login_url}")
-                    return redirect(auth_login_url)
-                except Exception as e:
-                    print(f"DEBUG: Direct auth_bp.login failed: {e}")
-
-                # 方法3：嘗試使用相對路徑 /login
-                print("DEBUG: Using fallback redirect to /login")
-                return redirect('/login')
+                if not current_app.login_manager or not current_app.login_manager.login_view:  # 系統不做登入及權限管理
+                    return redirect(url_for('root_bp.home'))
+                return redirect(url_for(current_app.login_manager.login_view))
 
         @self.blueprint.route('/blank')
         def blank():
