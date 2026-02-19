@@ -370,7 +370,7 @@ def start_server(app:Flask):
         GunicornApplication(app, kwargs).run()
     else:  # development, use flask embeded server
         import logging
-        log_file = './sqmif.log'
+        log_file = './funlab.log'
         handler = logging.FileHandler(log_file)
         handler.setLevel(logging.DEBUG)
         app.logger.addHandler(handler)
