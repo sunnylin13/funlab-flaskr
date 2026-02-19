@@ -18,6 +18,7 @@ flask-login = "^0.6.3"
 # gunicorn = "^21.2.0"  # WSGI service, add only when use it
 # gevent = "^23.9.1"  # add when add gunicorn
 funlab-libs = "^0.3.6"
+tzlocal = "^5.3.1"
 
 [build-system]
 requires = ["poetry-core"]
