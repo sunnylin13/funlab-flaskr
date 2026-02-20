@@ -4,6 +4,13 @@
     APP_LOGO = '/static/logo.svg'
     APP_NAME = 'FunLab'
     ENV = '{{ENV.TEST}}'
+    # SSE_PROVIDER controls which SSE implementation is active.
+    #   'builtin'  (default) – use funlab-flaskr's built-in EventManager directly.
+    #   'plugin'             – delegate to the funlab-sse SSEService plugin.
+    #                          Requires funlab-sse to be installed and listed in
+    #                          [tool.poetry.plugins."funlab_plugin"].
+    #                          Compare / evaluate before switching permanently.
+    # SSE_PROVIDER = 'builtin'
 [ENV]
     [ENV.DEVELOPMENT]
         DATABASE = '{{DATABASE.DEVELOPMENT}}'

@@ -22,11 +22,18 @@ class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
         self.app:FunlabFlask
-        self.event_manager = None
-        sse_provider = self.config.get('SSE_PROVIDER', 'builtin')
-        if sse_provider != 'plugin':
+        self._sse_provider: str = self.config.get('SSE_PROVIDER', 'builtin')
+
+        if self._sse_provider == 'builtin':
+            # Built-in SSE: initialise EventManager here.
             EventManager.register_event(SystemNotificationEvent)
             self.event_manager = EventManager(self.dbmgr)
+        else:
+            # Plugin SSE: SSEService plugin will set up self.sse_service and
+            # self.event_manager-equivalent.  Initialise placeholder here so
+            # attribute access before plugin load doesn't raise AttributeError.
+            self.event_manager = None
+            self.sse_service = None
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
@@ -41,49 +48,37 @@ class FunlabFlask(_FlaskBase):
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
+    @property
+    def _sse_mgr(self):
+        """Unified accessor: returns the active EventManager regardless of provider."""
+        if self._sse_provider == 'plugin':
+            return self.sse_service.sse_mgr if self.sse_service else None
+        return self.event_manager
+
     def send_all_users_system_notification(self, title:str, message:str,
-                    priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
-        if hasattr(self.app, 'sse_service'):
-            return self.app.sse_service.send_all_users_system_notification(
-                title=title,
-                message=message,
-                priority=priority,
-                expire_after=expire_after,
-            )
-        if not self.app.event_manager:
-            return None
-        online_user_ids = self.app.event_manager.connection_manager.get_eventtype_users(event_type="SystemNotification")
-        for target_userid in online_user_ids:
-            self.app.event_manager.create_event(
-                event_type="SystemNotification",
-                target_userid=target_userid,
-                priority=priority,
-                expire_after=expire_after,
-                title=title,
-                message=message,
-            )
+                    priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> None:  # minutes
+        if self._sse_provider == 'plugin' and self.sse_service:
+            self.sse_service.send_all_users_system_notification(
+                title=title, message=message, priority=priority, expire_after=expire_after)
+        elif self.event_manager:
+            online_user_ids = self.event_manager.connection_manager.get_eventtype_users(event_type="SystemNotification")
+            for target_userid in online_user_ids:
+                self.event_manager.create_event(event_type="SystemNotification",
+                        target_userid=target_userid, priority=priority,
+                        expire_after=expire_after, title=title, message=message)
 
     def send_user_system_notification(self, title:str, message:str,
                     target_userid: int = None,
                     priority: EventPriority = EventPriority.NORMAL, expire_after: int = None)-> EventBase:  # minutes
-        if hasattr(self.app, 'sse_service'):
-            return self.app.sse_service.send_user_system_notification(
-                title=title,
-                message=message,
-                target_userid=target_userid,
-                priority=priority,
-                expire_after=expire_after,
-            )
-        if not self.app.event_manager:
-            return None
-        return self.app.event_manager.create_event(
-            event_type="SystemNotification",
-            target_userid=target_userid,
-            priority=priority,
-            expire_after=expire_after,
-            title=title,
-            message=message,
-        )
+        if self._sse_provider == 'plugin' and self.sse_service:
+            return self.sse_service.send_user_system_notification(
+                title=title, message=message, target_userid=target_userid,
+                priority=priority, expire_after=expire_after)
+        elif self.event_manager:
+            return self.event_manager.create_event(event_type="SystemNotification",
+                    target_userid=target_userid, priority=priority,
+                    expire_after=expire_after, title=title, message=message)
+        return None
 
     def load_user_file(self, username:str, filename:str):
         data_path = self.get_user_data_storage_path(username)
@@ -159,17 +154,58 @@ class FunlabFlask(_FlaskBase):
             def ssetest():
                 return render_template('ssetest.html')
 
-            # # Add this route to your blueprint
-            @self.blueprint.route('/generate_notification', methods=['POST'])
-            @login_required
-            def generate_notification():
-                title = request.form.get('title', 'Test Notification')
-                message = request.form.get('message', 'This is a test notification.')
-                target_user = request.form.get('target_userid', None)
-                target_userid = int(target_user) if target_user else current_user.id
-                priority_level = request.form.get('priority', 'NORMAL')
-                priority = EventPriority[priority_level] if priority_level in EventPriority.__members__ else EventPriority.NORMAL
-                expire_after = request.form.get('expire_after', 5, type=int)
+        # SSE routes are only registered when using the built-in provider.
+        # When SSE_PROVIDER='plugin' the SSEService blueprint handles them.
+        # NOTE: self.config is available here (loaded before register_routes() is called
+        # by _FlaskBase.__init__), but self._sse_provider may not be set yet because
+        # FunlabFlask.__init__ sets it AFTER super().__init__() returns. Read config directly.
+        _sse_provider = self.config.get('SSE_PROVIDER', 'builtin')
+        if _sse_provider == 'plugin':
+            self.mylogger.info(
+                "SSE_PROVIDER='plugin': skipping built-in SSE route registration. "
+                "SSEService plugin will register /sse/*, /mark_event_read, etc."
+            )
+        else:
+            self._register_builtin_sse_routes()
+
+        # Error handlers and blueprint registration always run regardless of provider.
+        @self.errorhandler(403)
+        def access_deny_error(error):
+            return render_template('error-403.html', msg=str(error)), 403
+
+        @self.errorhandler(404)
+        def not_found_error(error):
+            return render_template('error-404.html', msg=str(error)), 404
+
+        @self.errorhandler(500)
+        def internal_error(error):
+            return render_template('error-500.html', msg=str(error)), 500
+
+        @self.errorhandler(Exception)
+        def handle_unexpected_error(error):
+            if isinstance(error, HTTPException):
+                return error
+            trace_info = traceback.format_exception(error)
+            trace_info = ''.join(trace_info)
+            traceback.print_exception(error)
+            return render_template('error-500.html', msg=str(error), trace_info=trace_info), 500
+
+        # Need to call flask's register_blueprint for all route, after route defined
+        self.register_blueprint(self.blueprint)
+
+    def _register_builtin_sse_routes(self):
+        """Register the built-in SSE routes (SSE_PROVIDER='builtin' only)."""
+        # # Add this route to your blueprint
+        @self.blueprint.route('/generate_notification', methods=['POST'])
+        @login_required
+        def generate_notification():
+            title = request.form.get('title', 'Test Notification')
+            message = request.form.get('message', 'This is a test notification.')
+            target_user = request.form.get('target_userid', None)
+            target_userid = int(target_user) if target_user else current_user.id
+            priority_level = request.form.get('priority', 'NORMAL')
+            priority = EventPriority[priority_level] if priority_level in EventPriority.__members__ else EventPriority.NORMAL
+            expire_after = request.form.get('expire_after', 5, type=int)
 
                 event = self.send_user_system_notification(
                     title=title,
@@ -298,30 +334,6 @@ class FunlabFlask(_FlaskBase):
                 response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
                 return response
 
-        @self.errorhandler(403)
-        def access_deny_error(error):
-            return render_template('error-403.html', msg=str(error)), 403
-
-        @self.errorhandler(404)
-        def not_found_error(error):
-            return render_template('error-404.html', msg=str(error)), 404
-
-        @self.errorhandler(500)
-        def internal_error(error):
-            return render_template('error-500.html', msg=str(error)), 500
-
-        @self.errorhandler(Exception)
-        def handle_unexpected_error(error):
-            if isinstance(error, HTTPException):
-                return error
-            trace_info = traceback.format_exception(error)
-            trace_info = ''.join(trace_info)
-            traceback.print_exception(error)
-            return render_template('error-500.html', msg=str(error), trace_info=trace_info), 500
-
-        # Need to call flask's register_blueprint for all route, after route defined
-        self.register_blueprint(self.blueprint)
-
     def register_menu(self):
         self.append_usermenu([
                         # MenuItem(title='Plugin Management',
@@ -404,7 +416,7 @@ def start_server(app:Flask):
         GunicornApplication(app, kwargs).run()
     else:  # development, use flask embeded server
         import logging
-        log_file = './sqmif.log'
+        log_file = './funlab.log'
         handler = logging.FileHandler(log_file)
         handler.setLevel(logging.DEBUG)
         app.logger.addHandler(handler)
@@ -418,12 +430,6 @@ def main(args=None):
     parser.add_argument("-e", "--envfile", dest="envfile", default='.env', help="specify .env file name and path")
     args = parser.parse_args(args)
     configfile=args.configfile
-    envfile=args.envfile
-    start_server(create_app(configfile=configfile, envfile=envfile))
-
-import sys
-if __name__ == "__main__":
-    sys.exit(main())
     envfile=args.envfile
     start_server(create_app(configfile=configfile, envfile=envfile))
 
