@@ -42,10 +42,17 @@ except ImportError:
 
         def to_json(self) -> str:
             return json.dumps(self.__dict__)
+        def to_json(self) -> str:
+            return json.dumps(self.__dict__)
 
         def __str__(self):
             return self.to_json()
 
+    class EventPriority(Enum):
+        LOW = 0
+        NORMAL = 1
+        HIGH = 2
+        CRITICAL = 3
     class EventPriority(Enum):
         LOW = 0
         NORMAL = 1
