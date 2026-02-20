@@ -22,3 +22,6 @@ funlab-libs = "^0.3.6"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+# [tool.poetry.plugins."funlab_plugin"]
+# HookTestView = "funlab.flaskr.hook_test_plugin:HookTestView"
