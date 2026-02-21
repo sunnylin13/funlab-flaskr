@@ -33,7 +33,6 @@ class FunlabFlask(_FlaskBase):
             # self.event_manager-equivalent.  Initialise placeholder here so
             # attribute access before plugin load doesn't raise AttributeError.
             self.event_manager = None
-            # self.sse_service = None
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
