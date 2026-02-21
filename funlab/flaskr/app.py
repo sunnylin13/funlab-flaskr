@@ -33,7 +33,7 @@ class FunlabFlask(_FlaskBase):
             # self.event_manager-equivalent.  Initialise placeholder here so
             # attribute access before plugin load doesn't raise AttributeError.
             self.event_manager = None
-            self.sse_service = None
+            # self.sse_service = None
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
@@ -207,132 +207,132 @@ class FunlabFlask(_FlaskBase):
             priority = EventPriority[priority_level] if priority_level in EventPriority.__members__ else EventPriority.NORMAL
             expire_after = request.form.get('expire_after', 5, type=int)
 
-                event = self.send_user_system_notification(
-                    title=title,
-                    message=message,
-                    target_userid=target_userid,
-                    priority=priority,
-                    expire_after=expire_after
-                )
+            event = self.send_user_system_notification(
+                title=title,
+                message=message,
+                target_userid=target_userid,
+                priority=priority,
+                expire_after=expire_after
+            )
 
-                if event:
-                    return jsonify({
-                        "status": "success",
-                        "event_id": event.id,
-                        "event_type": event.event_type,
-                        "created_at": event.created_at.isoformat()
-                    }), 201
-                else:
-                    return jsonify({"status": "error", "message": "Failed to create notification"}), 500
+            if event:
+                return jsonify({
+                    "status": "success",
+                    "event_id": event.id,
+                    "event_type": event.event_type,
+                    "created_at": event.created_at.isoformat()
+                }), 201
+            else:
+                return jsonify({"status": "error", "message": "Failed to create notification"}), 500
 
-            @self.blueprint.route('/mark_event_read/<int:event_id>', methods=['POST'])
-            @login_required
-            def mark_event_read(event_id):
-                """Mark an event as read by the current user"""
-                self.mylogger.debug(f"收到標記已讀請求：event_id={event_id}, user_id={current_user.id}")
+        @self.blueprint.route('/mark_event_read/<int:event_id>', methods=['POST'])
+        @login_required
+        def mark_event_read(event_id):
+            """Mark an event as read by the current user"""
+            self.mylogger.debug(f"收到標記已讀請求：event_id={event_id}, user_id={current_user.id}")
 
-                try:
-                    # Find the event in the database
-                    with self.dbmgr.session_context() as session:
-                        from funlab.flaskr.sse.models import EventEntity
-                        event_entity = session.query(EventEntity).filter_by(
-                            id=event_id,
-                            target_userid=current_user.id
-                        ).first()
+            try:
+                # Find the event in the database
+                with self.dbmgr.session_context() as session:
+                    from funlab.flaskr.sse.models import EventEntity
+                    event_entity = session.query(EventEntity).filter_by(
+                        id=event_id,
+                        target_userid=current_user.id
+                    ).first()
 
-                        if event_entity:
-                            self.mylogger.debug(f"找到事件：{event_entity.event_type}, 當前 is_read={event_entity.is_read}")
+                    if event_entity:
+                        self.mylogger.debug(f"找到事件：{event_entity.event_type}, 當前 is_read={event_entity.is_read}")
 
-                            if event_entity.is_read:
-                                self.mylogger.debug(f"事件 {event_id} 已經被標記為已讀")
-                                return jsonify({"status": "warning", "message": "Event already marked as read"}), 200
+                        if event_entity.is_read:
+                            self.mylogger.debug(f"事件 {event_id} 已經被標記為已讀")
+                            return jsonify({"status": "warning", "message": "Event already marked as read"}), 200
 
-                            event_entity.is_read = True
-                            session.commit()
-                            self.mylogger.debug(f"事件 {event_id} 已成功標記為已讀 by user {current_user.id}")
-                            return jsonify({"status": "success", "message": "Event marked as read"}), 200
-                        else:
-                            self.mylogger.warning(f"事件未找到或無權限：event_id={event_id}, user_id={current_user.id}")
-                            return jsonify({"status": "error", "message": "Event not found or access denied"}), 404
-
-                except Exception as e:
-                    self.mylogger.error(f"標記事件 {event_id} 為已讀時發生錯誤: {e}")
-                    return jsonify({"status": "error", "message": "Internal server error"}), 500
-
-            @self.blueprint.route('/mark_events_read', methods=['POST'])
-            @login_required
-            def mark_events_read():
-                """Mark multiple events as read by the current user."""
-                data = request.get_json()
-                event_ids = data.get('event_ids')
-
-                if not event_ids or not isinstance(event_ids, list):
-                    return jsonify({"status": "error", "message": "Invalid or missing event_ids"}), 400
-
-                self.mylogger.debug(f"收到批量標記已讀請求：event_ids={event_ids}, user_id={current_user.id}")
-
-                try:
-                    with self.dbmgr.session_context() as session:
-                        from funlab.flaskr.sse.models import EventEntity
-
-                        # Use 'in_' for an efficient batch update query
-                        updated_count = session.query(EventEntity).filter(
-                            EventEntity.id.in_(event_ids),
-                            EventEntity.target_userid == current_user.id,
-                            EventEntity.is_read == False
-                        ).update({'is_read': True}, synchronize_session=False)
-
+                        event_entity.is_read = True
                         session.commit()
+                        self.mylogger.debug(f"事件 {event_id} 已成功標記為已讀 by user {current_user.id}")
+                        return jsonify({"status": "success", "message": "Event marked as read"}), 200
+                    else:
+                        self.mylogger.warning(f"事件未找到或無權限：event_id={event_id}, user_id={current_user.id}")
+                        return jsonify({"status": "error", "message": "Event not found or access denied"}), 404
 
-                        self.mylogger.debug(f"成功將 {updated_count} 個事件標記為已讀 for user {current_user.id}")
-                        return jsonify({"status": "success", "message": f"{updated_count} events marked as read"}), 200
+            except Exception as e:
+                self.mylogger.error(f"標記事件 {event_id} 為已讀時發生錯誤: {e}")
+                return jsonify({"status": "error", "message": "Internal server error"}), 500
 
+        @self.blueprint.route('/mark_events_read', methods=['POST'])
+        @login_required
+        def mark_events_read():
+            """Mark multiple events as read by the current user."""
+            data = request.get_json()
+            event_ids = data.get('event_ids')
+
+            if not event_ids or not isinstance(event_ids, list):
+                return jsonify({"status": "error", "message": "Invalid or missing event_ids"}), 400
+
+            self.mylogger.debug(f"收到批量標記已讀請求：event_ids={event_ids}, user_id={current_user.id}")
+
+            try:
+                with self.dbmgr.session_context() as session:
+                    from funlab.flaskr.sse.models import EventEntity
+
+                    # Use 'in_' for an efficient batch update query
+                    updated_count = session.query(EventEntity).filter(
+                        EventEntity.id.in_(event_ids),
+                        EventEntity.target_userid == current_user.id,
+                        EventEntity.is_read == False
+                    ).update({'is_read': True}, synchronize_session=False)
+
+                    session.commit()
+
+                    self.mylogger.debug(f"成功將 {updated_count} 個事件標記為已讀 for user {current_user.id}")
+                    return jsonify({"status": "success", "message": f"{updated_count} events marked as read"}), 200
+
+            except Exception as e:
+                self.mylogger.error(f"批量標記事件為已讀時發生錯誤: {e}")
+                return jsonify({"status": "error", "message": "Internal server error"}), 500
+
+        @self.blueprint.route('/sse/<event_type>')
+        @login_required
+        def stream_events(event_type):
+            user_id = current_user.id
+            stream_id = self.event_manager.register_user_stream(user_id, event_type)
+            if not stream_id:
+                return Response("Max connections reached.", status=429)
+
+            # self.mylogger.debug(f"Client connected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
+            def event_stream():
+                try:
+                    # Safely get the stream queue
+                    user_streams = self.event_manager.connection_manager.user_connections.get(user_id, {})
+                    user_stream = user_streams.get(stream_id)
+
+                    if not user_stream:
+                        self.mylogger.warning(f"Stream {stream_id} not found for user {user_id} upon stream start.")
+                        return
+
+                    while True:
+                        try:
+                            event: EventBase = user_stream.get(timeout=10)  # Wait for an event or timeout
+
+                            # 對於恢復的事件和即時事件使用統一的序列化
+                            event_data = event.to_dict()
+                            import json
+                            sse = f"event: {event.event_type}\ndata: {json.dumps(event_data)}\n\n"
+                            yield sse
+                        except queue.Empty:
+                            # Send a heartbeat if no event is received within the timeout
+                            yield f"event: heartbeat\ndata: {{\"status\": \"heartbeat\"}}\n\n"
+                except GeneratorExit:
+                    # This block is executed when the client disconnects
+                    pass
                 except Exception as e:
-                    self.mylogger.error(f"批量標記事件為已讀時發生錯誤: {e}")
-                    return jsonify({"status": "error", "message": "Internal server error"}), 500
+                    self.mylogger.error(f"Event stream error for user_id={user_id}, stream_id={stream_id}: {e}")
+                finally:
+                    # self.mylogger.debug(f"Client disconnected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
+                    self.event_manager.unregister_user_stream(user_id, stream_id, event_type)
 
-            @self.blueprint.route('/sse/<event_type>')
-            @login_required
-            def stream_events(event_type):
-                user_id = current_user.id
-                stream_id = self.event_manager.register_user_stream(user_id, event_type)
-                if not stream_id:
-                    return Response("Max connections reached.", status=429)
-
-                # self.mylogger.debug(f"Client connected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
-                def event_stream():
-                    try:
-                        # Safely get the stream queue
-                        user_streams = self.event_manager.connection_manager.user_connections.get(user_id, {})
-                        user_stream = user_streams.get(stream_id)
-
-                        if not user_stream:
-                            self.mylogger.warning(f"Stream {stream_id} not found for user {user_id} upon stream start.")
-                            return
-
-                        while True:
-                            try:
-                                event: EventBase = user_stream.get(timeout=10)  # Wait for an event or timeout
-
-                                # 對於恢復的事件和即時事件使用統一的序列化
-                                event_data = event.to_dict()
-                                import json
-                                sse = f"event: {event.event_type}\ndata: {json.dumps(event_data)}\n\n"
-                                yield sse
-                            except queue.Empty:
-                                # Send a heartbeat if no event is received within the timeout
-                                yield f"event: heartbeat\ndata: {{\"status\": \"heartbeat\"}}\n\n"
-                    except GeneratorExit:
-                        # This block is executed when the client disconnects
-                        pass
-                    except Exception as e:
-                        self.mylogger.error(f"Event stream error for user_id={user_id}, stream_id={stream_id}: {e}")
-                    finally:
-                        # self.mylogger.debug(f"Client disconnected: user_id={user_id}, stream_id={stream_id}, event_type={event_type}")
-                        self.event_manager.unregister_user_stream(user_id, stream_id, event_type)
-
-                response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
-                return response
+            response = Response(stream_with_context(event_stream()), content_type='text/event-stream')
+            return response
 
     def register_menu(self):
         self.append_usermenu([
