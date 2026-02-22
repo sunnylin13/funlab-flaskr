@@ -1,11 +1,15 @@
 from __future__ import annotations
 import argparse
 
+from collections import defaultdict, deque
+from datetime import datetime, timezone
 from http.client import HTTPException
+from itertools import count
 from pathlib import Path
+from threading import Lock
 import traceback
 
-from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app)
+from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app, jsonify)
 from flask_login import current_user, login_required
 from funlab.core.auth import admin_required
 from funlab.core.menu import MenuItem, MenuDivider
@@ -14,10 +18,132 @@ from funlab.core.appbase import _FlaskBase
 from funlab.utils import vars2env
 from funlab.flaskr.plugin_mgmt_view import PluginManagerView
 
+
+class NotificationStore:
+    """In-memory notification buffer for non-SSE fallback.
+
+    Design: non-destructive reads.
+    - Notifications persist on the server until explicitly dismissed by the user.
+    - ``fetch_unread`` returns all undismissed notifications and tags each one with
+      ``is_recovered=True`` if it was already delivered in a previous poll (so the
+      browser can suppress the Toast popup for already-seen items on page reload).
+    - ``dismiss_all`` / ``dismiss_items`` are called when the user clicks
+      "Clear All" or the individual ✕ button.
+    """
+
+    def __init__(self, max_global: int = 200, max_per_user: int = 50):
+        self._global: deque = deque(maxlen=max_global)
+        # per-user: dict[user_id, dict[notif_id, notification]] – O(1) removal
+        self._per_user: dict[int, dict[int, dict]] = defaultdict(dict)
+        self._per_user_max = max_per_user
+
+        # Tracks the highest notification ID already delivered to each user.
+        # Items with id <= _last_delivered[user_id] are "recovered" on next fetch.
+        self._last_delivered_global: dict[int, int] = defaultdict(int)
+        self._last_delivered_user: dict[int, int] = defaultdict(int)
+
+        # Set of global notification IDs explicitly dismissed per user.
+        self._dismissed_global: dict[int, set] = defaultdict(set)
+
+        self._id_counter = count(1)
+        self._lock = Lock()
+
+    def _next_id(self) -> int:
+        return next(self._id_counter)
+
+    def _build_notification(self, title: str, message: str, priority: str) -> dict:
+        return {
+            "id": self._next_id(),
+            "event_type": "SystemNotification",
+            "priority": str(priority).upper(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "payload": {"title": title, "message": message},
+            "is_recovered": False,   # overridden at fetch time
+            "is_persistent": False,
+        }
+
+    def add_user(self, user_id: int, title: str, message: str, priority: str = "NORMAL") -> None:
+        with self._lock:
+            notif = self._build_notification(title, message, priority)
+            user_store = self._per_user[user_id]
+            # Enforce per-user cap by evicting the oldest item
+            if len(user_store) >= self._per_user_max:
+                oldest_id = min(user_store)
+                del user_store[oldest_id]
+            user_store[notif["id"]] = notif
+
+    def add_global(self, title: str, message: str, priority: str = "NORMAL") -> None:
+        with self._lock:
+            self._global.append(self._build_notification(title, message, priority))
+
+    def fetch_unread(self, user_id: int) -> list[dict]:
+        """Non-destructive read: returns all undismissed notifications.
+
+        Items already delivered in a previous fetch are tagged ``is_recovered=True``
+        so the browser banner shows them but omits the Toast popup.
+        After fetching, ``_last_delivered`` is advanced to the current maximum,
+        so subsequent fetches will correctly tag even newer arrivals.
+        """
+        import copy
+        with self._lock:
+            last_global = self._last_delivered_global[user_id]
+            dismissed   = self._dismissed_global[user_id]
+
+            global_items = []
+            new_max_global = last_global
+            for item in self._global:
+                if item["id"] in dismissed:
+                    continue
+                notif = copy.copy(item)
+                notif["is_recovered"] = (item["id"] <= last_global)
+                global_items.append(notif)
+                if item["id"] > new_max_global:
+                    new_max_global = item["id"]
+            self._last_delivered_global[user_id] = new_max_global
+
+            last_user = self._last_delivered_user[user_id]
+            user_store = self._per_user.get(user_id, {})
+            user_items = []
+            new_max_user = last_user
+            for item in user_store.values():
+                notif = copy.copy(item)
+                notif["is_recovered"] = (item["id"] <= last_user)
+                user_items.append(notif)
+                if item["id"] > new_max_user:
+                    new_max_user = item["id"]
+            self._last_delivered_user[user_id] = new_max_user
+
+            return global_items + user_items
+
+    def dismiss_items(self, user_id: int, item_ids: list[int]) -> None:
+        """Explicitly remove specific notifications for a user."""
+        with self._lock:
+            id_set = set(item_ids)
+            # Mark global notifications as dismissed (kept in deque for other users)
+            self._dismissed_global[user_id].update(id_set)
+            # Remove per-user notifications outright
+            user_store = self._per_user.get(user_id, {})
+            for nid in id_set:
+                user_store.pop(nid, None)
+
+    def dismiss_all(self, user_id: int) -> None:
+        """Explicitly remove all notifications for a user."""
+        with self._lock:
+            # Mark all current global IDs as dismissed
+            self._dismissed_global[user_id].update(item["id"] for item in self._global)
+            # Clear all per-user notifications
+            self._per_user.pop(user_id, None)
+            # Reset delivery cursors
+            self._last_delivered_global.pop(user_id, None)
+            self._last_delivered_user.pop(user_id, None)
+
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
         self.app:FunlabFlask
+        self.notification_store = NotificationStore()
+        if not hasattr(self, 'sse_service'):
+            self.sse_service = None
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
@@ -43,6 +169,8 @@ class FunlabFlask(_FlaskBase):
         if self.sse_service:
             self.sse_service.send_all_users_system_notification(
                 title=title, message=message, priority=priority, expire_after=expire_after)
+        else:
+            self.notification_store.add_global(title, message, priority)
 
     def send_user_system_notification(self, title: str, message: str,
                     target_userid: int = None,
@@ -56,6 +184,11 @@ class FunlabFlask(_FlaskBase):
             self.sse_service.send_user_system_notification(
                 title=title, message=message, target_userid=target_userid,
                 priority=priority, expire_after=expire_after)
+        else:
+            if target_userid is None:
+                self.notification_store.add_global(title, message, priority)
+            else:
+                self.notification_store.add_user(target_userid, title, message, priority)
 
     def load_user_file(self, username:str, filename:str):
         data_path = self.get_user_data_storage_path(username)
@@ -130,6 +263,35 @@ class FunlabFlask(_FlaskBase):
             @admin_required
             def ssetest():
                 return render_template('ssetest.html')
+
+        @self.blueprint.route('/notifications/poll')
+        @login_required
+        def poll_notifications():
+            """Return all undismissed notifications for the current user.
+
+            Items already delivered in a previous poll carry ``is_recovered=True``
+            so the browser can restore them in the banner without re-showing a Toast.
+            """
+            items = self.notification_store.fetch_unread(current_user.id)
+            return jsonify(items)
+
+        @self.blueprint.route('/notifications/clear', methods=['POST'])
+        @login_required
+        def clear_notifications():
+            """Dismiss every notification for the current user (Clear All button)."""
+            self.notification_store.dismiss_all(current_user.id)
+            return jsonify({"status": "ok"})
+
+        @self.blueprint.route('/notifications/dismiss', methods=['POST'])
+        @login_required
+        def dismiss_notifications():
+            """Dismiss specific notifications by ID (individual ✕ button)."""
+            from flask import request as req
+            data = req.get_json(silent=True) or {}
+            ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
+            if ids:
+                self.notification_store.dismiss_items(current_user.id, ids)
+            return jsonify({"status": "ok", "dismissed": ids})
 
         # SSE routes (/sse/*, /mark_event_read, etc.) are registered exclusively
         # by the SSEService plugin. When funlab-sse is not installed, those endpoints
