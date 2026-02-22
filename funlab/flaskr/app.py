@@ -235,26 +235,16 @@ class FunlabFlask(_FlaskBase):
         :meth:`send_global_notification` and the ``/notifications/*`` HTTP
         routes will delegate to *provider* transparently.
         
-        If provider has a Flask blueprint with static files, register it to
-        ensure static assets (e.g., sse_client.js) are accessible.
+        Note: If provider is a ServicePlugin, its blueprint is typically already
+        registered by the plugin framework. We skip re-registration to avoid
+        conflicts. Flask will serve static files from the registered blueprint's
+        static_folder automatically.
         """
         self.notification_provider = provider
         
-        # Register provider's blueprint if it's a ServicePlugin with static files
-        if hasattr(provider, 'blueprint'):
-            try:
-                self.register_blueprint(provider.blueprint)
-                self.mylogger.info(
-                    f"Registered plugin blueprint for {provider.__class__.__name__} "
-                    f"(static_folder={provider.blueprint.static_folder})"
-                )
-            except Exception as e:
-                self.mylogger.error(
-                    f"Failed to register plugin blueprint for {provider.__class__.__name__}: {e}"
-                )
-        
+        # Log provider registration (blueprint is likely already registered by plugin framework)
         self.mylogger.info(
-            f"Notification provider replaced: {provider.__class__.__name__} "
+            f"Notification provider set: {provider.__class__.__name__} "
             f"(realtime={provider.supports_realtime})"
         )
 
