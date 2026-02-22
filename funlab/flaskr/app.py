@@ -9,18 +9,23 @@ from pathlib import Path
 from threading import Lock
 import traceback
 
-from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app, jsonify)
+from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app)
 from flask_login import current_user, login_required
 from funlab.core.auth import admin_required
 from funlab.core.menu import MenuItem, MenuDivider
 from funlab.core.config import Config
 from funlab.core.appbase import _FlaskBase
+from funlab.core.notification import INotificationProvider
 from funlab.utils import vars2env
 from funlab.flaskr.plugin_mgmt_view import PluginManagerView
 
 
-class NotificationStore:
-    """In-memory notification buffer for non-SSE fallback.
+class PollingNotificationProvider(INotificationProvider):
+    """In-memory polling-based notification provider (built-in fallback).
+
+    Implements :class:`~funlab.core.notification.INotificationProvider` using
+    an in-memory store.  The browser retrieves notifications by polling
+    ``/notifications/poll`` periodically.
 
     Design: non-destructive reads.
     - Notifications persist on the server until explicitly dismissed by the user.
@@ -137,13 +142,76 @@ class NotificationStore:
             self._last_delivered_global.pop(user_id, None)
             self._last_delivered_user.pop(user_id, None)
 
+    # ------------------------------------------------------------------
+    # INotificationProvider interface methods
+    # ------------------------------------------------------------------
+
+    def send_user_notification(
+        self,
+        title: str,
+        message: str,
+        target_userid: int = None,
+        priority: str = 'NORMAL',
+        expire_after: int = None,
+    ) -> None:
+        if target_userid is None:
+            self.add_global(title, message, priority)
+        else:
+            self.add_user(target_userid, title, message, priority)
+
+    def send_global_notification(
+        self,
+        title: str,
+        message: str,
+        priority: str = 'NORMAL',
+        expire_after: int = None,
+    ) -> None:
+        self.add_global(title, message, priority)
+
+    def register_routes(self, blueprint) -> None:
+        """Register ``/notifications/*`` routes on the given blueprint.
+
+        Dispatches through ``current_app.notification_provider`` at request
+        time so the routes work transparently after the SSE plugin replaces
+        this provider.
+        """
+        from flask import current_app, jsonify, request as req
+        from flask_login import current_user, login_required
+
+        @blueprint.route('/notifications/poll')
+        @login_required
+        def poll_notifications():
+            """Return all undismissed notifications for the current user."""
+            items = current_app.notification_provider.fetch_unread(current_user.id)
+            return jsonify(items)
+
+        @blueprint.route('/notifications/clear', methods=['POST'])
+        @login_required
+        def clear_notifications():
+            """Dismiss every notification for the current user (Clear All button)."""
+            current_app.notification_provider.dismiss_all(current_user.id)
+            return jsonify({"status": "ok"})
+
+        @blueprint.route('/notifications/dismiss', methods=['POST'])
+        @login_required
+        def dismiss_notifications():
+            """Dismiss specific notifications by ID (individual ✕ button)."""
+            data = req.get_json(silent=True) or {}
+            ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
+            if ids:
+                current_app.notification_provider.dismiss_items(current_user.id, ids)
+            return jsonify({"status": "ok", "dismissed": ids})
+
+
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
+        # Initialize notification provider BEFORE super().__init__()
+        # because register_routes() is called during _FlaskBase.__init__()
+        # and needs self.notification_provider to be available.
+        self.notification_provider: INotificationProvider = PollingNotificationProvider()
+
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
         self.app:FunlabFlask
-        self.notification_store = NotificationStore()
-        if not hasattr(self, 'sse_service'):
-            self.sse_service = None
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
@@ -159,42 +227,53 @@ class FunlabFlask(_FlaskBase):
             f.write(data)
 
 
-    def send_all_users_system_notification(self, title: str, message: str,
+    def send_global_notification(self, title: str, message: str,
                     priority: str = 'NORMAL', expire_after: int = None) -> None:
-        """Send a system notification to all connected users.
+        """Broadcast a system notification to all users.
 
         ``priority`` is a plain string: 'LOW', 'NORMAL', 'HIGH', or 'CRITICAL'.
-        No SSE model imports are needed by callers.
+        Delegates to the active :attr:`notification_provider`.
         """
-        if self.sse_service:
-            self.sse_service.send_all_users_system_notification(
-                title=title, message=message, priority=priority, expire_after=expire_after)
-        else:
-            self.notification_store.add_global(title, message, priority)
+        self.notification_provider.send_global_notification(
+            title=title, message=message, priority=priority, expire_after=expire_after)
 
-    def send_user_system_notification(self, title: str, message: str,
+    # Backward-compatibility alias
+    send_all_users_system_notification = send_global_notification
+
+    def send_user_notification(self, title: str, message: str,
                     target_userid: int = None,
                     priority: str = 'NORMAL', expire_after: int = None) -> None:
         """Send a system notification to a specific user.
 
         ``priority`` is a plain string: 'LOW', 'NORMAL', 'HIGH', or 'CRITICAL'.
-        No SSE model imports are needed by callers.
+        Delegates to the active :attr:`notification_provider`.
         """
-        if self.sse_service:
-            self.sse_service.send_user_system_notification(
-                title=title, message=message, target_userid=target_userid,
-                priority=priority, expire_after=expire_after)
-        else:
-            if target_userid is None:
-                self.notification_store.add_global(title, message, priority)
-            else:
-                self.notification_store.add_user(target_userid, title, message, priority)
+        self.notification_provider.send_user_notification(
+            title=title, message=message, target_userid=target_userid,
+            priority=priority, expire_after=expire_after)
+
+    # Backward-compatibility alias
+    send_user_system_notification = send_user_notification
 
     def load_user_file(self, username:str, filename:str):
         data_path = self.get_user_data_storage_path(username)
         with open(data_path.joinpath(filename), 'r') as f:
             data = f.read()
         return data
+
+    def set_notification_provider(self, provider: INotificationProvider) -> None:
+        """Replace the active notification provider.
+
+        Called by ``SSEService._setup()`` when the SSE plugin initialises.
+        All subsequent calls to :meth:`send_user_notification` /
+        :meth:`send_global_notification` and the ``/notifications/*`` HTTP
+        routes will delegate to *provider* transparently.
+        """
+        self.notification_provider = provider
+        self.mylogger.info(
+            f"Notification provider replaced: {provider.__class__.__name__} "
+            f"(realtime={provider.supports_realtime})"
+        )
 
     def _register_plugin_manager_view(self):
         """註冊內建的擴充功能管理視圖"""
@@ -214,7 +293,6 @@ class FunlabFlask(_FlaskBase):
             static_folder='static',
             template_folder='templates',
         )
-        sse_provider = self.config.get('SSE_PROVIDER', 'builtin')
         # set route for blueprint
         @self.blueprint.route('/')
         def index():
@@ -257,51 +335,10 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
-        if sse_provider != 'plugin':
-            @self.blueprint.route('/ssetest')
-            @login_required
-            @admin_required
-            def ssetest():
-                return render_template('ssetest.html')
-
-        @self.blueprint.route('/notifications/poll')
-        @login_required
-        def poll_notifications():
-            """Return all undismissed notifications for the current user.
-
-            Items already delivered in a previous poll carry ``is_recovered=True``
-            so the browser can restore them in the banner without re-showing a Toast.
-            """
-            items = self.notification_store.fetch_unread(current_user.id)
-            return jsonify(items)
-
-        @self.blueprint.route('/notifications/clear', methods=['POST'])
-        @login_required
-        def clear_notifications():
-            """Dismiss every notification for the current user (Clear All button)."""
-            self.notification_store.dismiss_all(current_user.id)
-            return jsonify({"status": "ok"})
-
-        @self.blueprint.route('/notifications/dismiss', methods=['POST'])
-        @login_required
-        def dismiss_notifications():
-            """Dismiss specific notifications by ID (individual ✕ button)."""
-            from flask import request as req
-            data = req.get_json(silent=True) or {}
-            ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
-            if ids:
-                self.notification_store.dismiss_items(current_user.id, ids)
-            return jsonify({"status": "ok", "dismissed": ids})
-
-        # SSE routes (/sse/*, /mark_event_read, etc.) are registered exclusively
-        # by the SSEService plugin. When funlab-sse is not installed, those endpoints
-        # are simply unavailable (no builtin fallback).
-        if sse_provider != 'plugin':
-            self.mylogger.warning(
-                "SSE_PROVIDER is not 'plugin'. "
-                "SSE functionality requires funlab-sse plugin. "
-                "Install funlab-sse and set SSE_PROVIDER='plugin' to enable SSE."
-            )
+        # Delegate /notifications/* route registration to the active provider.
+        # Routes dispatch through current_app.notification_provider at request time,
+        # so they work transparently regardless of which provider is active.
+        self.notification_provider.register_routes(self.blueprint)
 
         # Error handlers and blueprint registration always run regardless of provider.
         @self.errorhandler(403)
