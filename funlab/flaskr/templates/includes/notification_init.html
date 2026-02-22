@@ -1,0 +1,23 @@
+{#
+  FunLab Notification System – initialisation partial
+
+  Included by layouts/base.html at the bottom of <body>.
+  Requires context variable:  sse_enabled (bool)  – injected by _FlaskBase.
+  Only rendered for authenticated users (checked in context_processor before setting sse_enabled).
+#}
+{% if sse_enabled is defined %}
+{# --- Static CSS --------------------------------------------------------- #}
+<link href="/static/dist/css/_notifications.css" rel="stylesheet" />
+
+{# --- Runtime config (minimal inline script) ----------------------------- #}
+{# This is the ONLY server→JS bridge: one boolean value.                   #}
+{# Everything else lives in the static JS files below.                     #}
+<script>
+    window.FUNLAB_CONFIG = window.FUNLAB_CONFIG || {};
+    window.FUNLAB_CONFIG.sseEnabled = {{ sse_enabled | tojson }};
+</script>
+
+{# --- Static JS ---------------------------------------------------------- #}
+<script src="/static/js/sse_client.js"></script>
+<script src="/static/js/notifications.js"></script>
+{% endif %}

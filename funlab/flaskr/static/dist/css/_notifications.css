@@ -1,0 +1,54 @@
+/* ==========================================================================
+   FunLab Notification System Styles
+   Extracted from appbase.py inject_sse_client_script for maintainability
+   ========================================================================== */
+
+/* ---- Toast Notification Container ---- */
+#notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    width: 350px;
+}
+
+/* ---- Toast Notification Item ---- */
+.toast-notification {
+    background-color: #fff;
+    color: #333;
+    padding: 15px 20px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-left: 5px solid #007bff;
+    opacity: 0.95;
+    transition: all 0.4s ease-in-out;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.toast-notification.high-priority {
+    border-left-color: #dc3545;
+}
+
+.toast-content h5 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.toast-content p {
+    margin: 0;
+    font-size: 0.9em;
+}
+
+.toast-close-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0 0 15px;
+}
