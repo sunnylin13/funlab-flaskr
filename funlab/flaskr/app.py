@@ -168,40 +168,6 @@ class PollingNotificationProvider(INotificationProvider):
     ) -> None:
         self.add_global(title, message, priority)
 
-    def register_routes(self, blueprint) -> None:
-        """Register ``/notifications/*`` routes on the given blueprint.
-
-        Dispatches through ``current_app.notification_provider`` at request
-        time so the routes work transparently after the SSE plugin replaces
-        this provider.
-        """
-        from flask import current_app, jsonify, request as req
-        from flask_login import current_user, login_required
-
-        @blueprint.route('/notifications/poll')
-        @login_required
-        def poll_notifications():
-            """Return all undismissed notifications for the current user."""
-            items = current_app.notification_provider.fetch_unread(current_user.id)
-            return jsonify(items)
-
-        @blueprint.route('/notifications/clear', methods=['POST'])
-        @login_required
-        def clear_notifications():
-            """Dismiss every notification for the current user (Clear All button)."""
-            current_app.notification_provider.dismiss_all(current_user.id)
-            return jsonify({"status": "ok"})
-
-        @blueprint.route('/notifications/dismiss', methods=['POST'])
-        @login_required
-        def dismiss_notifications():
-            """Dismiss specific notifications by ID (individual ✕ button)."""
-            data = req.get_json(silent=True) or {}
-            ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
-            if ids:
-                current_app.notification_provider.dismiss_items(current_user.id, ids)
-            return jsonify({"status": "ok", "dismissed": ids})
-
 
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
@@ -268,8 +234,25 @@ class FunlabFlask(_FlaskBase):
         All subsequent calls to :meth:`send_user_notification` /
         :meth:`send_global_notification` and the ``/notifications/*`` HTTP
         routes will delegate to *provider* transparently.
+        
+        If provider has a Flask blueprint with static files, register it to
+        ensure static assets (e.g., sse_client.js) are accessible.
         """
         self.notification_provider = provider
+        
+        # Register provider's blueprint if it's a ServicePlugin with static files
+        if hasattr(provider, 'blueprint'):
+            try:
+                self.register_blueprint(provider.blueprint)
+                self.mylogger.info(
+                    f"Registered plugin blueprint for {provider.__class__.__name__} "
+                    f"(static_folder={provider.blueprint.static_folder})"
+                )
+            except Exception as e:
+                self.mylogger.error(
+                    f"Failed to register plugin blueprint for {provider.__class__.__name__}: {e}"
+                )
+        
         self.mylogger.info(
             f"Notification provider replaced: {provider.__class__.__name__} "
             f"(realtime={provider.supports_realtime})"
@@ -335,9 +318,45 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
-        # Delegate /notifications/* route registration to the active provider.
-        # Routes dispatch through current_app.notification_provider at request time,
-        # so they work transparently regardless of which provider is active.
+        # ------------------------------------------------------------------
+        # Notification routes: dispatch through current_app.notification_provider
+        # ------------------------------------------------------------------
+        # These routes are provider-agnostic and work with any INotificationProvider
+        # implementation. The actual backend (in-memory polling or DB-backed SSE)
+        # is selected at request time via current_app.notification_provider.
+
+        @self.blueprint.route('/notifications/poll')
+        @login_required
+        def poll_notifications():
+            """Return all undismissed notifications for the current user.
+
+            Dispatches to the active provider's fetch_unread().
+            Works with both polling and SSE backends.
+            """
+            items = current_app.notification_provider.fetch_unread(current_user.id)
+            from flask import jsonify
+            return jsonify(items)
+
+        @self.blueprint.route('/notifications/clear', methods=['POST'])
+        @login_required
+        def clear_notifications():
+            """Dismiss every notification for the current user (Clear All button)."""
+            current_app.notification_provider.dismiss_all(current_user.id)
+            from flask import jsonify
+            return jsonify({"status": "ok"})
+
+        @self.blueprint.route('/notifications/dismiss', methods=['POST'])
+        @login_required
+        def dismiss_notifications():
+            """Dismiss specific notifications by ID (individual ✕ button)."""
+            from flask import request as req, jsonify
+            data = req.get_json(silent=True) or {}
+            ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
+            if ids:
+                current_app.notification_provider.dismiss_items(current_user.id, ids)
+            return jsonify({"status": "ok", "dismissed": ids})
+
+        # Allow provider to register its own provider-specific routes (e.g. /sse/*, /ssetest)
         self.notification_provider.register_routes(self.blueprint)
 
         # Error handlers and blueprint registration always run regardless of provider.
