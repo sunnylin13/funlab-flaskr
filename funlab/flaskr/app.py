@@ -234,14 +234,14 @@ class FunlabFlask(_FlaskBase):
         All subsequent calls to :meth:`send_user_notification` /
         :meth:`send_global_notification` and the ``/notifications/*`` HTTP
         routes will delegate to *provider* transparently.
-        
+
         Note: If provider is a ServicePlugin, its blueprint is typically already
         registered by the plugin framework. We skip re-registration to avoid
         conflicts. Flask will serve static files from the registered blueprint's
         static_folder automatically.
         """
         self.notification_provider = provider
-        
+
         # Log provider registration (blueprint is likely already registered by plugin framework)
         self.mylogger.info(
             f"Notification provider set: {provider.__class__.__name__} "

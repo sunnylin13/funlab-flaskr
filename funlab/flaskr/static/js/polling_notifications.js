@@ -1,31 +1,18 @@
-﻿/**
- * FunLab Notification Manager
+/**
+ * FunLab Notification Manager - Polling Mode
  *
- * Handles SSE and polling notification display for the FunLab application.
+ * Handles polling-based notification display for the FunLab application.
  * Reads runtime config from window.FUNLAB_CONFIG (injected by notification_init.html).
  *
- * Depends on: sse_client.js (must be loaded before this script)
- *
- * Notification lifecycle
- * ??????????????????????
- * SSE mode
- *   New :  SSE push ??renderNotification(is_recovered=false) ??Toast + Banner
- *   Reload: (no server-side history for SSE) ??notifications are lost on page reload
- *           (SSE plugin may implement its own history endpoint in the future)
- *   Dismiss single : sseClient.markEventRead(id)
- *   Clear all      : sseClient.markEventsRead(ids)
- *
- * Polling / NotificationStore mode
- *   New :  periodic fetch /notifications/poll ??is_recovered=false ??Toast + Banner
- *   Reload: same fetch ??server tags already-delivered items with is_recovered=true
- *           ??Banner restored, NO Toast re-popup
+ * Notification lifecycle (Polling / NotificationStore mode)
+ * ─────────────────────────────────────────────────────────
+ *   New :  periodic fetch /notifications/poll → is_recovered=false → Toast + Banner
+ *   Reload: same fetch → server tags already-delivered items with is_recovered=true
+ *           → Banner restored, NO Toast re-popup
  *   Dismiss single : POST /notifications/dismiss {ids:[id]}
  *   Clear all      : POST /notifications/clear
  */
 document.addEventListener('DOMContentLoaded', function () {
-    const sseEnabled = window.FUNLAB_CONFIG ? !!window.FUNLAB_CONFIG.sseEnabled : false;
-    window.__SSE_ENABLED__ = sseEnabled;
-
     // -----------------------------------------------------------------------
     // 1. Ensure toast container exists
     // -----------------------------------------------------------------------
@@ -75,11 +62,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // -----------------------------------------------------------------------
-    // 4. Unified render function ??shared by SSE and polling paths
+    // 4. Unified render function
     //
     //    is_recovered (server-set):
-    //      false ??brand-new notification  ??Toast + Banner
-    //      true  ??already delivered before (page reload recovery) ??Banner only
+    //      false → brand-new notification  → Toast + Banner
+    //      true  → already delivered before (page reload recovery) → Banner only
     // -----------------------------------------------------------------------
     function renderNotification(data /*, eventType */) {
         const isRecovered  = data.is_recovered || false;
@@ -92,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // Avoid adding the same notification twice (e.g., race between SSE + poll)
+        // Avoid adding the same notification twice
         if (bannerNotificationArea &&
                 bannerNotificationArea.querySelector(`[data-event-id="${eventId}"]`)) {
             return;
@@ -102,12 +89,12 @@ document.addEventListener('DOMContentLoaded', function () {
         updateNotificationBadge();
         updateFooterVisibility();
 
-        // A. Toast ??only for fresh (non-recovered) notifications
+        // A. Toast – only for fresh (non-recovered) notifications
         if (!isRecovered) {
             _showToast(data, payload, eventId);
         }
 
-        // B. Banner drop-down item ??always
+        // B. Banner drop-down item – always
         if (bannerNotificationArea) {
             _addBannerItem(data, payload, eventId, isPersistent);
         }
@@ -206,7 +193,6 @@ document.addEventListener('DOMContentLoaded', function () {
             event.stopPropagation();
 
             const listItem     = element.closest('.list-group-item');
-            const isPersistent = listItem ? listItem.dataset.isPersistent !== '0' : true;
 
             if (listItem) {
                 listItem.remove();
@@ -217,15 +203,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (!eventId) return;
 
-            if (sseEnabled && typeof sseClient !== 'undefined' && isPersistent) {
-                // SSE mode: mark read via SSE plugin API
-                sseClient.markEventRead(eventId)
-                    .then(() => console.debug('[Notification] SSE marked as read:', eventId))
-                    .catch(err => console.error('[Notification] SSE markEventRead failed:', err));
-            } else {
-                // Polling mode: dismiss via NotificationStore API
-                _serverDismissItems([parseInt(eventId, 10)]);
-            }
+            // Polling mode: dismiss via NotificationStore API
+            _serverDismissItems([parseInt(eventId, 10)]);
         },
 
         /** Clear all banner notifications and remove them from the server */
@@ -237,25 +216,13 @@ document.addEventListener('DOMContentLoaded', function () {
             const listItems = bannerNotificationArea.querySelectorAll('.list-group-item');
             if (listItems.length === 0) return;
 
-            const allIds = Array.from(listItems).map(item => item.dataset.eventId);
-            const persistentIds = Array.from(listItems)
-                .filter(item => item.dataset.isPersistent !== '0')
-                .map(item => item.dataset.eventId);
-
             bannerNotificationArea.innerHTML = '';
             unreadCount = 0;
             updateNotificationBadge();
             updateFooterVisibility();
 
-            if (sseEnabled && typeof sseClient !== 'undefined' && persistentIds.length > 0) {
-                // SSE mode
-                sseClient.markEventsRead(persistentIds)
-                    .then(() => console.debug('[Notification] SSE all marked as read.'))
-                    .catch(err => console.error('[Notification] SSE markEventsRead failed:', err));
-            } else {
-                // Polling mode: single clear-all call (no need to enumerate IDs)
-                _serverClearAll();
-            }
+            // Polling mode: single clear-all call
+            _serverClearAll();
         },
 
         /** Expose renderNotification for external use (e.g., custom plugins) */
@@ -284,23 +251,12 @@ document.addEventListener('DOMContentLoaded', function () {
         pollingTimer = setInterval(fetchNotifications, 15000);
     }
 
-    // -----------------------------------------------------------------------
-    // 8. SSE mode: subscribe for new events.
-    //    Also do an initial poll to restore any notifications that pre-date the
-    //    current SSE connection (e.g., sent while the user was offline).
-    //    NOTE: in SSE mode the NotificationStore is NOT used for new events,
-    //    so the recovery poll only recovers NotificationStore items (if any).
-    // -----------------------------------------------------------------------
-    if (sseEnabled && typeof sseClient !== 'undefined') {
-        sseClient.subscribe('SystemNotification', renderNotification);
-        console.debug('[Notification] SSE subscribed to SystemNotification.');
-    } else {
-        console.warn('[Notification] SSE not enabled ??using polling fallback.');
-        startNotificationPolling();
-    }
+    // Start polling
+    console.log('[Notification] Polling mode enabled.');
+    startNotificationPolling();
 
     // -----------------------------------------------------------------------
-    // 9. Initial UI sync
+    // 8. Initial UI sync
     // -----------------------------------------------------------------------
     updateNotificationBadge();
     updateFooterVisibility();

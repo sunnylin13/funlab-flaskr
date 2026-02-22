@@ -17,7 +17,13 @@
     window.FUNLAB_CONFIG.sseEnabled = {{ sse_enabled | tojson }};
 </script>
 
-{# --- Static JS ---------------------------------------------------------- #}
-<script src="/static/js/sse_client.js"></script>
-<script src="/static/js/notifications.js"></script>
+{# --- Conditional JS loading based on notification provider ------------- #}
+{% if sse_enabled %}
+    {# SSE plugin is installed and active - load SSE-specific scripts #}
+    <script src="/sse/static/js/sse_client.js"></script>
+    <script src="/sse/static/js/sse_notifications.js"></script>
+{% else %}
+    {# Fallback to polling mode - load polling-specific script #}
+    <script src="/static/js/polling_notifications.js"></script>
+{% endif %}
 {% endif %}
