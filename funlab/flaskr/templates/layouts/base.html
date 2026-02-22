@@ -42,6 +42,7 @@
   <!-- Specific Page CSS goes HERE  -->
   {% block stylesheets %}{% endblock stylesheets %}
   <!-- End -->
+  {{ call_hook('view_layouts_base_html_head') }}
 </head>
 
 <body class="layout-fluid"> <!-- class="layout-fluid" 放寬佔據整個頁面-->
@@ -66,7 +67,7 @@
           {% block page_header %}{% endblock page_header %}
         </div>
         <div>
-          <!-- Flash Messages 
+          <!-- Flash Messages
           {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
           <div id="scroll-container" class="overflow-auto">
@@ -84,7 +85,9 @@
       </div>
       <!-- Page body -->
       <div class="page-body">
+        {{ call_hook('view_layouts_base_content_top') }}
         {% block page_body %}{% endblock page_body %}
+        {{ call_hook('view_layouts_base_content_bottom') }}
         <!-- Flash Messages -->
         <div class="text-left">
           {% with messages = get_flashed_messages(with_categories=true) %}
@@ -105,7 +108,7 @@
         {% with footer_page = config.FOOTER_PAGE | default('includes/footer.html') %}
           {% include footer_page %} <!--includes/footer.html -->
         {% endwith %}
-          
+
         {% endblock page_footer %}
       </footer>
     </div>
@@ -119,8 +122,9 @@
   {% block javascripts %}
   {% endblock javascripts %}
 
-  {# Load and initialize SSE client for authenticated users #}
-  {{ sse_client_script|safe }}
+  {# Notification system: CSS + config bridge + JS (static files) #}
+  {% include 'includes/notification_init.html' %}
+  {{ call_hook('view_layouts_base_body_bottom') }}
 </body>
 
 </html>
