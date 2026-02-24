@@ -5,7 +5,7 @@ Plugin管理API和監控介面 - 整合版本
 from flask import Blueprint, jsonify, request, render_template
 from flask_login import login_required
 from funlab.core.auth import admin_required
-from funlab.core.plugin import ViewPlugin
+from funlab.core.enhanced_plugin import EnhancedViewPlugin
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -13,12 +13,28 @@ if TYPE_CHECKING:
     from funlab.flaskr.app import FunlabFlask
 
 
-class PluginManagerView(ViewPlugin):
+class PluginManagerView(EnhancedViewPlugin):
     """Plugin管理視圖 - 集成到主應用中"""
 
     def __init__(self, app: 'FunlabFlask', url_prefix: str = None):
         super().__init__(app, url_prefix or 'plugin-manager')
         self._register_routes()
+        if self.plugin_config.get('HOOK_EXAMPLES', False):
+            self._register_hook_examples()
+
+    def _register_hook_examples(self):
+        if not hasattr(self.app, 'hook_manager'):
+            return
+
+        self.app.hook_manager.register_hook(
+            'view_layouts_base_content_bottom',
+            self._hook_example_content_bottom,
+            priority=50,
+            plugin_name=self.name,
+        )
+
+    def _hook_example_content_bottom(self, context):
+        return '<!-- pluginmanager hook example -->'
 
     def _register_routes(self):
         """註冊管理路由"""
