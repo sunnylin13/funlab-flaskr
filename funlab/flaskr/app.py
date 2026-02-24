@@ -192,7 +192,6 @@ class FunlabFlask(_FlaskBase):
         with open(data_path.joinpath(filename), 'wb') as f:
             f.write(data)
 
-
     def send_global_notification(self, title: str, message: str,
                     priority: str = 'NORMAL', expire_after: int = None) -> None:
         """Broadcast a system notification to all users.
@@ -202,9 +201,6 @@ class FunlabFlask(_FlaskBase):
         """
         self.notification_provider.send_global_notification(
             title=title, message=message, priority=priority, expire_after=expire_after)
-
-    # Backward-compatibility alias
-    send_all_users_system_notification = send_global_notification
 
     def send_user_notification(self, title: str, message: str,
                     target_userid: int = None,
@@ -217,9 +213,6 @@ class FunlabFlask(_FlaskBase):
         self.notification_provider.send_user_notification(
             title=title, message=message, target_userid=target_userid,
             priority=priority, expire_after=expire_after)
-
-    # Backward-compatibility alias
-    send_user_system_notification = send_user_notification
 
     def load_user_file(self, username:str, filename:str):
         data_path = self.get_user_data_storage_path(username)
