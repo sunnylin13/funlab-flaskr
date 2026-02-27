@@ -99,6 +99,19 @@
         border-top: 1px solid var(--tblr-border-color);
         background-color: var(--tblr-bg-surface);
     }
+
+    /* Dark mode 菜單顏色修正 - 確保足夠的對比度 */
+    html[data-bs-theme="dark"] .navbar-vertical .nav-link,
+    html[data-bs-theme="dark"] .navbar-vertical .dropdown-item,
+    html[data-bs-theme="dark"] aside .nav-link,
+    html[data-bs-theme="dark"] aside .dropdown-item {
+        color: var(--tblr-body-color) !important;
+    }
+
+    html[data-bs-theme="dark"] .navbar-vertical .nav-link:hover,
+    html[data-bs-theme="dark"] aside .nav-link:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+    }
 </style>
 <!-- Navbar overlap layout -->
 <header class="navbar navbar-expand-md sticky-top">
