@@ -169,6 +169,11 @@ dmypy.json
 !.vscode/launch.json
 *.code-workspace
 
+# Node / Playwright
+node_modules/
+test-results/
+playwright-report/
+
 ### VisualStudioCode Patch ###
 # Ignore all local history of files
 .history
