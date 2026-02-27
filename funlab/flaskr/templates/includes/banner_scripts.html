@@ -39,34 +39,32 @@
         });
     }
     
-    // banner theme toggler
+    // banner theme toggler (Tabler 1.4.0 compatible)
     var darkThemeLink = document.getElementById("enable-dark-theme");
     if (darkThemeLink) {
         darkThemeLink.addEventListener("click", function (event) {
-            event.preventDefault(); // Prevent the link from navigating
-            // Get the current search string parameters
+            event.preventDefault();
+            // Set theme immediately in localStorage and DOM
+            localStorage.setItem("tabler-theme", "dark");
+            document.documentElement.setAttribute("data-bs-theme", "dark");
+            // Navigate to page with theme parameter for persistence
             var searchParams = new URLSearchParams(window.location.search);
-            // Modify or add the desired parameter
             searchParams.set("theme", "dark");
-            // Update the href attribute with the modified search string
-            darkThemeLink.href = window.location.pathname + "?" + searchParams.toString();
-            // Navigate to the modified URL
-            window.location.href = darkThemeLink.href;
+            window.location.href = window.location.pathname + "?" + searchParams.toString();
         });
     }
     
     var lightThemeLink = document.getElementById("enable-light-theme");
     if (lightThemeLink) {
         lightThemeLink.addEventListener("click", function (event) {
-            event.preventDefault(); // Prevent the link from navigating
-            // Get the current search string parameters
+            event.preventDefault();
+            // Set theme immediately in localStorage and DOM
+            localStorage.setItem("tabler-theme", "light");
+            document.documentElement.removeAttribute("data-bs-theme");
+            // Navigate to page with theme parameter for persistence
             var searchParams = new URLSearchParams(window.location.search);
-            // Modify or add the desired parameter
             searchParams.set("theme", "light");
-            // Update the href attribute with the modified search string
-            lightThemeLink.href = window.location.pathname + "?" + searchParams.toString();
-            // Navigate to the modified URL
-            window.location.href = lightThemeLink.href;
+            window.location.href = window.location.pathname + "?" + searchParams.toString();
         });
     }
 </script>
