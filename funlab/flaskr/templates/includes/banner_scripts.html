@@ -39,18 +39,19 @@
         });
     }
     
-    // banner theme toggler (Tabler 1.4.0 compatible)
+    // banner theme toggler (Tabler 1.4.0 compatible - no page reload)
     var darkThemeLink = document.getElementById("enable-dark-theme");
     if (darkThemeLink) {
         darkThemeLink.addEventListener("click", function (event) {
             event.preventDefault();
-            // Set theme immediately in localStorage and DOM
+            // Set theme immediately in localStorage and DOM (instant visual change)
             localStorage.setItem("tabler-theme", "dark");
             document.documentElement.setAttribute("data-bs-theme", "dark");
-            // Navigate to page with theme parameter for persistence
+            // Update URL without reloading page (for bookmarking and sharing)
             var searchParams = new URLSearchParams(window.location.search);
             searchParams.set("theme", "dark");
-            window.location.href = window.location.pathname + "?" + searchParams.toString();
+            var newUrl = window.location.pathname + "?" + searchParams.toString();
+            window.history.replaceState({path: newUrl}, "", newUrl);
         });
     }
     
@@ -58,13 +59,14 @@
     if (lightThemeLink) {
         lightThemeLink.addEventListener("click", function (event) {
             event.preventDefault();
-            // Set theme immediately in localStorage and DOM
+            // Set theme immediately in localStorage and DOM (instant visual change)
             localStorage.setItem("tabler-theme", "light");
             document.documentElement.removeAttribute("data-bs-theme");
-            // Navigate to page with theme parameter for persistence
+            // Update URL without reloading page (for bookmarking and sharing)
             var searchParams = new URLSearchParams(window.location.search);
             searchParams.set("theme", "light");
-            window.location.href = window.location.pathname + "?" + searchParams.toString();
+            var newUrl = window.location.pathname + "?" + searchParams.toString();
+            window.history.replaceState({path: newUrl}, "", newUrl);
         });
     }
 </script>
