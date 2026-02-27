@@ -2,20 +2,13 @@
 
 如果在 Dark/Light 主題切換後發現菜單不工作，請按以下步驟快速診斷：
 
+> **重要提示**：Tabler 1.4.0 使用 `--tblr-*` CSS 變數前綴（如 `--tblr-body-color`, `--tblr-body-bg`），而不是 Bootstrap 標準的 `--bs-*` 前綴。這是 Tabler 的自定義設計。
+
 ---
 
 ## 🚀 一鍵診斷 (複制粘貼到瀏覽器 Console)
 
-打開瀏覽器開發工具 (F12) → Console 標籤 → **複制下方 JavaScript 代碼**
-
-⚠️ **重要提示**：
-- ❌ **不要複制** \`\`\`javascript 和 \`\`\` 這兩行 Markdown 標記
-- ✅ **只複制** 從 `//` 註釋開始到 `console.groupEnd();` 結束的純 JavaScript 代碼
-- 💡 **快捷方式**：點擊下方代碼塊右上角的複製按鈕（如果編輯器支持）
-
----
-
-### 📋 診斷腳本代碼
+打開瀏覽器開發工具 (F12) → Console 標籤 → 複制粘貼以下代碼：
 
 ```javascript
 // ============================================
@@ -50,19 +43,22 @@ if (sidebar) {
 }
 console.groupEnd();
 
-// 3. CSS 變數檢查
+// 3. CSS 變數檢查 (Tabler 使用 --tblr-* 前綴，不是 --bs-*)
 console.group("3️⃣ CSS Custom Properties");
 const htmlStyle = window.getComputedStyle(document.documentElement);
 const cssVars = {
-    "color": htmlStyle.getPropertyValue("--bs-body-color").trim(),
-    "bg": htmlStyle.getPropertyValue("--bs-body-bg").trim(),
-    "surface": htmlStyle.getPropertyValue("--bs-bg-surface").trim(),
-    "border": htmlStyle.getPropertyValue("--bs-border-color").trim()
+    "tblr-body-color": htmlStyle.getPropertyValue("--tblr-body-color").trim(),
+    "tblr-body-bg": htmlStyle.getPropertyValue("--tblr-body-bg").trim(),
+    "tblr-bg-surface": htmlStyle.getPropertyValue("--tblr-bg-surface").trim(),
+    "tblr-border-color": htmlStyle.getPropertyValue("--tblr-border-color").trim(),
+    "tblr-primary": htmlStyle.getPropertyValue("--tblr-primary").trim(),
+    "tblr-secondary": htmlStyle.getPropertyValue("--tblr-secondary").trim()
 };
 
-console.log("✓ CSS Variables (active):");
+console.log("✓ Tabler CSS Variables (active):");
 Object.entries(cssVars).forEach(([key, val]) => {
-    console.log(`  --bs-${key === "color" ? "body-color" : key === "bg" ? "body-bg" : key === "surface" ? "bg-surface" : "border-color"}: ${val || "❌ not set"}`);
+    const status = val ? "✅" : "❌ not set";
+    console.log(`  --${key}: ${val || status}`);
 });
 console.groupEnd();
 
@@ -107,14 +103,14 @@ console.groupEnd();
 // 6. 颜色对比度检查 (Dark mode)
 console.group("6️⃣ Dark Mode Contrast Check");
 if (currentTheme === "dark") {
-    const bodyColor = cssVars.color;
-    const bodyBg = cssVars.bg;
+    const bodyColor = cssVars["tblr-body-color"];
+    const bodyBg = cssVars["tblr-body-bg"];
     
     // 簡單的對比度評估
     console.log("✓ Text color (dark mode):", bodyColor);
     console.log("✓ Background (dark mode):", bodyBg);
-    console.log("  💡 Tip: Use WebAIM Contrast Checker to verify WCAG AA compliance");
-    console.log("     https://webaim.org/resources/contrastchecker/");
+    console.log("  💡 Tip: Light text on dark bg expected (e.g., #e5e7eb on #111827)");
+    console.log("     WebAIM Contrast Checker: https://webaim.org/resources/contrastchecker/");
 } else {
     console.log("⏭️ Skipped (Not in dark mode)");
 }
@@ -151,21 +147,6 @@ console.log("💡 If issues persist, scroll up to view details.");
 console.groupEnd();
 ```
 
-**⚠️ 複制時遇到問題？**
-- 確認沒有複制到 \`\`\`javascript 開頭行
-- 確認沒有複制到 \`\`\` 結尾行
-- 使用下面的 **純淨版腳本文件**（推薦）
-
----
-
-### 🎯 方法 2：使用純淨版診斷腳本文件（推薦）
-
-如果從上方複制遇到問題，使用這個純淨版本：
-
-1. 打開文件：[menu-diagnostic.js](./menu-diagnostic.js)
-2. 全選 (Ctrl+A) 並複制 (Ctrl+C)
-3. 粘貼到瀏覽器 Console 並按 Enter
-
 ---
 
 ## 🧪 運行後的預期結果
@@ -177,9 +158,10 @@ console.groupEnd();
 ✓ Stored theme (localStorage): dark
 ✓ Sidebar found: ✅ Yes
 ✓ Navigation items found: 15 items
-✓ CSS Variables (active):
-  --bs-body-color: rgb(170, 176, 182)
-  --bs-body-bg: rgb(10, 14, 39)
+✓ Tabler CSS Variables (active):
+  --tblr-body-color: rgb(229, 231, 235) ✅
+  --tblr-body-bg: rgb(17, 24, 39) ✅
+  --tblr-primary: rgb(6, 111, 209) ✅
 ✓ Sample menu link styles:
   color: rgb(170, 176, 182)
   background: rgba(0, 0, 0, 0)
@@ -199,7 +181,7 @@ console.groupEnd();
 ```css
 html[data-bs-theme="dark"] .nav-link,
 html[data-bs-theme="dark"] .dropdown-item {
-    color: var(--bs-body-color) !important;
+    color: var(--tblr-body-color) !important;
 }
 ```
 
@@ -259,7 +241,7 @@ console.log("display:", styles.display);  // 應該不是 'none'
 - [ ] **主題應用**：`Current theme` 和 `Stored theme` 相符
 - [ ] **菜單存在**：Sidebar 或 Navbar collapse 找到
 - [ ] **菜單項數量**：Navigation items ≥ 1
-- [ ] **CSS 變數**：所有 `--bs-*` 值都已設置（不是空）
+- [ ] **CSS 變數**：所有 `--tblr-*` 值都已設置（不是空）
 - [ ] **對比度**：文字和背景顏色值完全不同
 - [ ] **Bootstrap 互動**：Dropdown instance 已激活
 - [ ] **無已知問題**：修復列表為空或為綠色 ✅
