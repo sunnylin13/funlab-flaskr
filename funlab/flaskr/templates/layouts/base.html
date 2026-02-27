@@ -43,6 +43,15 @@
   {% block stylesheets %}{% endblock stylesheets %}
   <!-- End -->
   {{ call_hook('view_layouts_base_html_head') }}
+  <!-- Prevent Flash of Wrong Color (FOWC) - apply theme before CSS renders -->
+  <script>
+    (function() {
+      const theme = localStorage.getItem('tabler-theme') || 'light';
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-bs-theme', 'dark');
+      }
+    })();
+  </script>
 </head>
 
 <body class="layout-fluid"> <!-- class="layout-fluid" 放寬佔據整個頁面-->
