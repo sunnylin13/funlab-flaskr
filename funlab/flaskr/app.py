@@ -248,6 +248,8 @@ class FunlabFlask(_FlaskBase):
             # 註冊到應用中，使其可用
             if hasattr(plugin_mgr_view, 'blueprint'):
                 self.register_blueprint(plugin_mgr_view.blueprint)
+            # ✅ 調用 setup_menus() 以註冊選單
+            # plugin_mgr_view.setup_menus()
             self.mylogger.info("PluginManagerView registered successfully")
         except Exception as e:
             self.mylogger.error(f"Failed to register PluginManagerView: {e}")
