@@ -1,0 +1,198 @@
+<!--
+  Theme Settings Offcanvas Panel
+  Adapted from Tabler 1.4.0 settings.html (Liquid → Jinja2)
+  Provides: Color mode, Color scheme, Font family, Theme base, Corner radius
+-->
+<div class="settings">
+    <form class="offcanvas offcanvas-start offcanvas-narrow" tabindex="-1" id="offcanvasSettings"
+          aria-labelledby="offcanvasSettingsLabel">
+        <div class="offcanvas-header">
+            <h2 class="offcanvas-title" id="offcanvasSettingsLabel">Theme Settings</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column">
+            <div>
+                <!-- Color Mode (Dark / Light) -->
+                <div class="mb-4">
+                    <label class="form-label">Color mode</label>
+                    <p class="form-hint">Choose the color mode for your app.</p>
+                    {% set modes = ['light', 'dark'] %}
+                    {% for mode in modes %}
+                    <label class="form-check">
+                        <div class="form-selectgroup-item">
+                            <input type="radio" name="theme" value="{{ mode }}" class="form-check-input"
+                                   {% if mode == 'light' %}checked{% endif %} />
+                            <div class="form-check-label">{{ mode|capitalize }}</div>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <!-- Color Scheme (Primary Color) -->
+                <div class="mb-4">
+                    <label class="form-label">Color scheme</label>
+                    <p class="form-hint">The perfect color mode for your app.</p>
+                    <div class="row g-2">
+                        {% set colors = ['blue', 'azure', 'indigo', 'purple', 'pink', 'red', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan'] %}
+                        {% for color in colors %}
+                        <div class="col-auto">
+                            <label class="form-colorinput">
+                                <input name="theme-primary" type="radio" value="{{ color }}"
+                                       class="form-colorinput-input" />
+                                <span class="form-colorinput-color bg-{{ color }}"></span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Font Family -->
+                <div class="mb-4">
+                    <label class="form-label">Font family</label>
+                    <p class="form-hint">Choose the font family that fits your app.</p>
+                    <div>
+                        {% set fonts = ['sans-serif', 'serif', 'monospace', 'comic'] %}
+                        {% for font in fonts %}
+                        <label class="form-check">
+                            <div class="form-selectgroup-item">
+                                <input type="radio" name="theme-font" value="{{ font }}" class="form-check-input"
+                                       {% if font == 'sans-serif' %}checked{% endif %} />
+                                <div class="form-check-label">{{ font|capitalize }}</div>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Theme Base (Gray Shade) -->
+                <div class="mb-4">
+                    <label class="form-label">Theme base</label>
+                    <p class="form-hint">Choose the gray shade for your app.</p>
+                    <div>
+                        {% set bases = ['slate', 'gray', 'zinc', 'neutral', 'stone'] %}
+                        {% for base in bases %}
+                        <label class="form-check">
+                            <div class="form-selectgroup-item">
+                                <input type="radio" name="theme-base" value="{{ base }}" class="form-check-input"
+                                       {% if base == 'gray' %}checked{% endif %} />
+                                <div class="form-check-label">{{ base|capitalize }}</div>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Corner Radius -->
+                <div class="mb-4">
+                    <label class="form-label">Corner Radius</label>
+                    <p class="form-hint">Choose the border radius factor for your app.</p>
+                    <div>
+                        {% set radiuses = ['0', '0.5', '1', '1.5', '2'] %}
+                        {% for radius in radiuses %}
+                        <label class="form-check">
+                            <div class="form-selectgroup-item">
+                                <input type="radio" name="theme-radius" value="{{ radius }}" class="form-check-input"
+                                       {% if radius == '1' %}checked{% endif %} />
+                                <div class="form-check-label">{{ radius }}</div>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-auto space-y">
+                <button type="button" class="btn w-100" id="reset-changes">
+                    <!-- Tabler icon: rotate -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-rotate" width="24"
+                         height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M19.95 11a8 8 0 1 0 -.5 4m.5 5v-5h-5"/>
+                    </svg>
+                    Reset changes
+                </button>
+                <a href="#" class="btn btn-primary w-100" data-bs-dismiss="offcanvas">
+                    Save
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var themeConfig = {
+            "theme": "light",
+            "theme-base": "gray",
+            "theme-font": "sans-serif",
+            "theme-primary": "blue",
+            "theme-radius": "1"
+        };
+
+        var url = new URL(window.location);
+        var form = document.getElementById("offcanvasSettings");
+        var resetButton = document.getElementById("reset-changes");
+
+        if (!form) return;
+
+        /**
+         * Sync all radio buttons in the settings form with current localStorage / defaults
+         */
+        var checkItems = function () {
+            for (var key in themeConfig) {
+                var value = window.localStorage.getItem("tabler-" + key) || themeConfig[key];
+
+                if (!!value) {
+                    var radios = form.querySelectorAll('[name="' + key + '"]');
+
+                    if (!!radios) {
+                        radios.forEach(function (radio) {
+                            radio.checked = (radio.value === value);
+                        });
+                    }
+                }
+            }
+        };
+
+        /**
+         * Handle radio change — apply to DOM, save to localStorage, update URL
+         */
+        form.addEventListener("change", function (event) {
+            var target = event.target,
+                name = target.name,
+                value = target.value;
+
+            for (var key in themeConfig) {
+                if (name === key) {
+                    if (value !== themeConfig[key]) {
+                        document.documentElement.setAttribute("data-bs-" + key, value);
+                    } else {
+                        document.documentElement.removeAttribute("data-bs-" + key);
+                    }
+                    window.localStorage.setItem("tabler-" + key, value);
+                    url.searchParams.set(key, value);
+                }
+            }
+
+            window.history.pushState({}, "", url);
+        });
+
+        /**
+         * Reset all settings to defaults
+         */
+        resetButton.addEventListener("click", function () {
+            for (var key in themeConfig) {
+                document.documentElement.removeAttribute("data-bs-" + key);
+                window.localStorage.removeItem("tabler-" + key);
+                url.searchParams.delete(key);
+            }
+
+            checkItems();
+            window.history.pushState({}, "", url);
+        });
+
+        // Initialize radio button states on page load
+        checkItems();
+    });
+</script>

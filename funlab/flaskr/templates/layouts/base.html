@@ -25,6 +25,7 @@
   <link href="/static/dist/css/tabler-flags.min.css?1.4.0" rel="stylesheet" />
   <link href="/static/dist/css/tabler-payments.min.css?1.4.0" rel="stylesheet" />
   <link href="/static/dist/css/tabler-vendors.min.css?1.4.0" rel="stylesheet" />
+  <link href="/static/dist/css/tabler-themes.min.css?1.4.0" rel="stylesheet" />
   <link href="/static/dist/css/demo.min.css?1.4.0" rel="stylesheet" />
   <style>
     @import url('https://rsms.me/inter/inter.css');
@@ -43,20 +44,11 @@
   {% block stylesheets %}{% endblock stylesheets %}
   <!-- End -->
   {{ call_hook('view_layouts_base_html_head') }}
-  <!-- Prevent Flash of Wrong Color (FOWC) - apply theme before CSS renders -->
-  <script>
-    (function() {
-      const theme = localStorage.getItem('tabler-theme') || 'light';
-      if (theme === 'dark') {
-        document.documentElement.setAttribute('data-bs-theme', 'dark');
-      }
-    })();
-  </script>
+  <!-- Theme initialization (Tabler 1.4.0) - loaded in <head> to prevent FOWC -->
+  <script src="/static/dist/js/tabler-theme.min.js?1.4.0"></script>
 </head>
 
 <body class="layout-fluid"> <!-- class="layout-fluid" 放寬佔據整個頁面-->
-  <!-- Theme initialization (Tabler 1.4.0) -->
-  <script src="/static/dist/js/tabler-theme.min.js?1.4.0"></script>
   {% set layout = request.args.get('layout', 'vertical') %}
   <div class="page">
     {% if layout=='vertical' %}
@@ -125,6 +117,8 @@
   <!-- modal-dialog includes/footer.html -->
   {% block modal_dialog %}{% endblock modal_dialog %}
   <!-- End modal-dialog  -->
+  <!-- Theme Settings Offcanvas Panel -->
+  {% include 'includes/settings.html' %}
   {% include 'includes/scripts.html' %}
   {% include 'includes/banner_scripts.html' %}
 
