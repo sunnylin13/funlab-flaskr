@@ -416,10 +416,7 @@ def start_server(app:Flask):
         try:
             # https://stackoverflow.com/questions/70396641/how-to-run-gunicorn-inside-python-not-as-a-command-line
             try:
-                from gevent import monkey
-                monkey.patch_all() # thread=False, select=False)  # for issue: https://github.com/gevent/gevent/issues/1016
-                # import gunicorn
-                from gunicorn.app.wsgiapp import WSGIApplication  # pylint: disable=import-error # ignore the warning: "No module named 'gunicorn.app.wsgiapp'"
+                from gunicorn.app.wsgiapp import WSGIApplication  # pylint: disable=import-error
             except ImportError as e:
                 raise Exception("If use gunicorn as WSGI server, please install needed packages: pip install gunicorn gevent") from e
             from funlab.flaskr.conf import gunicorn_conf
