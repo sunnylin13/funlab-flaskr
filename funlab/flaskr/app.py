@@ -25,7 +25,7 @@ class FunlabFlask(_FlaskBase):
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
-        mylogger.end_progress("FunlabFlase created.", key='funlabflask')
+        mylogger.end_progress("FunlabFlask created.", key='funlabflask')
 
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
@@ -148,6 +148,38 @@ class FunlabFlask(_FlaskBase):
             else:
                 return render_template('about.html')
 
+        @self.blueprint.route('/health')
+        def health():
+            from flask import jsonify
+            import funlab.core.prewarm as prewarm
+
+            plugin_health = {}
+            for name, plugin in self.plugins.items():
+                try:
+                    h = plugin.health
+                    plugin_health[name] = {
+                        'healthy': bool(getattr(h, 'is_healthy', False)),
+                        'error_count': int(getattr(h, 'error_count', 0)),
+                        'last_error': getattr(h, 'last_error', None),
+                    }
+                except Exception as exc:
+                    plugin_health[name] = {
+                        'healthy': False,
+                        'error_count': 1,
+                        'last_error': str(exc),
+                    }
+
+            prewarm_status = prewarm.status()
+            all_plugins_healthy = all(v.get('healthy', False) for v in plugin_health.values()) if plugin_health else True
+            has_prewarm_pending = any(v.get('status') == 'pending' for v in prewarm_status.values())
+            system_ok = all_plugins_healthy and not has_prewarm_pending
+
+            return jsonify({
+                'status': 'ok' if system_ok else 'degraded',
+                'plugins': plugin_health,
+                'prewarm': prewarm_status,
+            }), (200 if system_ok else 503)
+
         # ------------------------------------------------------------------
         # Notification routes: dispatch through current_app.notification_provider
         # ------------------------------------------------------------------
@@ -255,7 +287,7 @@ def start_server(app:Flask):
         port = config.get('PORT', 5000)
         kwargs['host'] = host
         kwargs['port'] = port
-        app.mylogger.info(f"Start Waitress server at {host}:{port}")
+        app.mylogger.info(f"\nStart Waitress server at {host}:{port}")
         serve(app, **kwargs)
     elif wsgi == 'gunicorn':
         try:
