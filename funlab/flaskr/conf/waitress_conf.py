@@ -4,7 +4,7 @@
 import multiprocessing
 # _quiet = False  # for debug information purpose set False
 # _profile = True  # for debug profiling purpose set True
-# will use FunlabFlase's config.toml setting
+# will use FunlabFlask's config.toml setting
 # host = '0.0.0.0'
 # port = 5000
 # url_scheme = 'https'
