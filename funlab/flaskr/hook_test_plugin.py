@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from funlab.core.enhanced_plugin import EnhancedViewPlugin
+from funlab.core.plugin import Plugin
 
 
-class HookTestView(EnhancedViewPlugin):
+class HookTestView(Plugin):
     """Minimal plugin for validating HookManager integration."""
 
     def __init__(self, app, url_prefix=None):
@@ -103,7 +103,7 @@ class HookTestView(EnhancedViewPlugin):
             plugin_name=self.name,
         )
 
-        # Model Hooks (示範用)
+        # Model Hooks (example)
         self.app.hook_manager.register_hook(
             "model_before_save",
             self._log_model_operation,
@@ -123,7 +123,7 @@ class HookTestView(EnhancedViewPlugin):
             plugin_name=self.name,
         )
 
-        # Task Hooks (示範用)
+        # Task Hooks (example)
         self.app.hook_manager.register_hook(
             "task_before_execute",
             self._log_task_execution,
