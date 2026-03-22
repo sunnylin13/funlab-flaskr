@@ -517,8 +517,37 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     window.healthCheckAll = function() {
-        alert('執行全體健康檢查...');
-        refreshData();
+        fetch('/plugin-manager/api/plugins')
+        .then(response => response.json())
+        .then(response => {
+            if (!response.success || !response.data || !response.data.plugins) {
+                throw new Error(response.error || '無法取得插件清單');
+            }
+
+            const pluginNames = Object.keys(response.data.plugins);
+            const checks = pluginNames.map(name =>
+                fetch(`/plugin-manager/api/plugins/${name}/health`)
+                .then(r => r.json().then(data => ({ status: r.status, data })))
+                .then(result => ({ name, ok: result.status === 200 && result.data.success && !!result.data.data?.healthy }))
+                .catch(() => ({ name, ok: false }))
+            );
+
+            return Promise.all(checks);
+        })
+        .then(results => {
+            const healthy = results.filter(r => r.ok).length;
+            const total = results.length;
+            const unhealthyNames = results.filter(r => !r.ok).map(r => r.name);
+            if (unhealthyNames.length > 0) {
+                alert(`全體健康檢查完成：${healthy}/${total} 健康\n異常插件：${unhealthyNames.join(', ')}`);
+            } else {
+                alert(`全體健康檢查完成：${healthy}/${total} 健康`);
+            }
+            refreshData();
+        })
+        .catch(error => {
+            alert('執行全體健康檢查失敗: ' + error.message);
+        });
     };
 
     window.refreshData = refreshData;
