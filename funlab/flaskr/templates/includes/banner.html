@@ -252,15 +252,9 @@
                         alt="User avatar">
                     <div class="d-none d-xl-block ps-2">
                         <div>{{ current_user.username }}
-                            {% if current_user.is_admin %}
-                            <div class="mt-1 small text-primary">
+                            <div class="mt-1 small {{ current_user_role_tone|default('text-secondary', true) }}">
                                 {{ current_user.role|capitalize }}
                             </div>
-                            {% else %}
-                            <div class="mt-1 small text-secondary">
-                                {{ current_user.role|capitalize }}
-                            </div>
-                            {% endif %}
                         </div>
                     </div>
                 </a>

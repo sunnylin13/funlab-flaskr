@@ -1,7 +1,7 @@
 """Plugin management API and monitoring interface."""
 from flask import Blueprint, jsonify, request, render_template
-from flask_login import login_required
-from funlab.core.auth import admin_required
+from funlab.core.auth import policy_required
+from funlab.core.policy import is_admin
 from funlab.core.plugin import Plugin
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 class PluginManagerView(Plugin):
     """Built-in plugin management and monitoring view."""
+
+    security_mode = 'required'
 
     def __init__(self, app: 'FunlabFlask', url_prefix: str = None):
         super().__init__(app, url_prefix or 'plugin-manager')
@@ -36,7 +38,7 @@ class PluginManagerView(Plugin):
     def _register_routes(self):
         """Register management routes."""
         @self._blueprint.route('/api/plugins', methods=['GET'])
-        @admin_required
+        @policy_required(is_admin)
         def get_plugins():
             """Return plugin statistics."""
             try:
@@ -61,20 +63,30 @@ class PluginManagerView(Plugin):
                 }), 500
 
         @self._blueprint.route('/api/plugins/<plugin_name>/load', methods=['POST'])
-        @admin_required
+        @policy_required(is_admin)
         def load_plugin(plugin_name: str):
             """Load a plugin instance, primarily for lazy-loaded plugins."""
             try:
                 if hasattr(self.app, 'plugin_manager'):
-                    # Use ``get_plugin()`` to trigger lazy loading.
-                    plugin_instance = self.app.plugin_manager.get_plugin(plugin_name)
-                    success = plugin_instance is not None
+                    manager = self.app.plugin_manager
+                    state = manager.get_plugin_state(plugin_name)
+                    if state is None:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Plugin {plugin_name} not found'
+                        }), 404
+
+                    success = manager.load_plugin(plugin_name)
+                    current_state = manager.get_plugin_state(plugin_name)
                 else:
                     success = False
+                    current_state = 'unknown'
 
                 return jsonify({
                     'success': success,
-                    'message': f'Plugin {plugin_name} load {"successful" if success else "failed"}'
+                    'message': f'Plugin {plugin_name} load {"successful" if success else "failed"}',
+                    'plugin_name': plugin_name,
+                    'state': current_state
                 })
             except Exception as e:
                 return jsonify({
@@ -83,18 +95,30 @@ class PluginManagerView(Plugin):
                 }), 500
 
         @self._blueprint.route('/api/plugins/<plugin_name>/reload', methods=['POST'])
-        @admin_required
+        @policy_required(is_admin)
         def reload_plugin(plugin_name: str):
             """Reload an existing plugin."""
             try:
                 if hasattr(self.app, 'plugin_manager'):
-                    success = self.app.plugin_manager.reload_plugin(plugin_name)
+                    manager = self.app.plugin_manager
+                    state = manager.get_plugin_state(plugin_name)
+                    if state is None:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Plugin {plugin_name} not found'
+                        }), 404
+
+                    success = manager.reload_plugin(plugin_name)
+                    current_state = manager.get_plugin_state(plugin_name)
                 else:
                     success = False
+                    current_state = 'unknown'
 
                 return jsonify({
                     'success': success,
-                    'message': f'Plugin {plugin_name} reload {"successful" if success else "failed"}'
+                    'message': f'Plugin {plugin_name} reload {"successful" if success else "failed"}',
+                    'plugin_name': plugin_name,
+                    'state': current_state
                 })
             except Exception as e:
                 return jsonify({
@@ -103,13 +127,28 @@ class PluginManagerView(Plugin):
                 }), 500
 
         @self._blueprint.route('/api/plugins/<plugin_name>/health', methods=['GET'])
-        @admin_required
+        @policy_required(is_admin)
         def check_plugin_health(plugin_name: str):
             """Check plugin health."""
             try:
                 plugin = None
                 if hasattr(self.app, 'plugin_manager'):
-                    plugin = self.app.plugin_manager.get_plugin(plugin_name)
+                    manager = self.app.plugin_manager
+                    state = manager.get_plugin_state(plugin_name)
+                    if state is None:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Plugin not found'
+                        }), 404
+                    if state != 'active':
+                        return jsonify({
+                            'success': False,
+                            'error': f'Plugin is {state}. Please start plugin first.',
+                            'state': state,
+                            'plugin_name': plugin_name
+                        }), 409
+
+                    plugin = manager.peek_plugin(plugin_name)
                 elif plugin_name in self.app.plugins:
                     plugin = self.app.plugins[plugin_name]
 
@@ -126,6 +165,7 @@ class PluginManagerView(Plugin):
                         'data': {
                             'healthy': health,
                             'plugin_name': plugin_name,
+                            'state': 'active',
                             'check_time': datetime.now().isoformat()
                         }
                     })
@@ -145,13 +185,28 @@ class PluginManagerView(Plugin):
                 }), 500
 
         @self._blueprint.route('/api/plugins/<plugin_name>/metrics', methods=['GET'])
-        @admin_required
+        @policy_required(is_admin)
         def get_plugin_metrics(plugin_name: str):
             """Return plugin metrics."""
             try:
                 plugin = None
                 if hasattr(self.app, 'plugin_manager'):
-                    plugin = self.app.plugin_manager.get_plugin(plugin_name)
+                    manager = self.app.plugin_manager
+                    state = manager.get_plugin_state(plugin_name)
+                    if state is None:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Plugin not found'
+                        }), 404
+                    if state != 'active':
+                        return jsonify({
+                            'success': False,
+                            'error': f'Plugin is {state}. Please start plugin first.',
+                            'state': state,
+                            'plugin_name': plugin_name
+                        }), 409
+
+                    plugin = manager.peek_plugin(plugin_name)
                 elif plugin_name in self.app.plugins:
                     plugin = self.app.plugins[plugin_name]
 
@@ -168,6 +223,7 @@ class PluginManagerView(Plugin):
                         'data': {
                             'plugin_name': plugin_name,
                             'metrics': metrics,
+                            'state': 'active',
                             'timestamp': datetime.now().isoformat()
                         }
                     })
@@ -187,7 +243,7 @@ class PluginManagerView(Plugin):
                 }), 500
 
         @self._blueprint.route('/api/cache/clear', methods=['POST'])
-        @admin_required
+        @policy_required(is_admin)
         def clear_plugin_cache():
             """Clear the plugin metadata cache."""
             try:
@@ -209,7 +265,7 @@ class PluginManagerView(Plugin):
                 }), 500
 
         @self._blueprint.route('/management')
-        @admin_required
+        @policy_required(is_admin)
         def plugin_management():
             """Render the plugin management dashboard."""
             # Gather plugin statistics for the dashboard.
@@ -303,10 +359,10 @@ class PluginManagerView(Plugin):
             title='Plugin Management',
             icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-plug" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><path d="M9.785 6l8.215 8.215l-2.054 2.054a5.81 5.81 0 1 1 -8.215 -8.215l2.054 -2.054z"></path><path d="M4 20l3.5 -3.5"></path><path d="M15 4l-3.5 3.5"></path><path d="M20 9l-3.5 3.5"></path></svg>',
             href='/plugin-manager/management',
-            admin_only=True
+            required_policy=is_admin,
         )
 
-        # Append directly to the main menu; accessibility checks still honor ``admin_only``.
+        # Append directly to the main menu; accessibility checks are handled by ``required_policy``.
         try:
             self.app.append_mainmenu([plugin_mgmt_item])
             self.mylogger.info("Plugin Management menu added to main menu")
