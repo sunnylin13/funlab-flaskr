@@ -3,14 +3,16 @@ import argparse
 from http.client import HTTPException
 from pathlib import Path
 import traceback
+from werkzeug.routing import BuildError
 
 from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app)
-from flask_login import current_user, login_required
-from funlab.core.auth import admin_required
+from flask_login import current_user
+from funlab.core.auth import policy_required
 from funlab.core.menu import MenuItem, MenuDivider
 from funlab.core.config import Config
 from funlab.core.appbase import _FlaskBase
 from funlab.core.notification import INotificationProvider
+from funlab.core.policy import is_admin, is_authenticated_user
 from funlab.utils import vars2env
 from funlab.flaskr.plugin_mgmt_view import PluginManagerView
 
@@ -89,6 +91,12 @@ class FunlabFlask(_FlaskBase):
     def _register_plugin_manager_view(self):
         """註冊內建的擴充功能管理視圖"""
         try:
+            if not self._is_security_component_enabled(PluginManagerView):
+                self.mylogger.info(
+                    "PluginManagerView skipped in %s mode because it requires authorization.",
+                    getattr(self, 'security_mode', 'public'),
+                )
+                return
             plugin_mgr_view = PluginManagerView(self)
             # 註冊到應用中，使其可用
             if hasattr(plugin_mgr_view, 'blueprint'):
@@ -98,6 +106,15 @@ class FunlabFlask(_FlaskBase):
             self.mylogger.info("PluginManagerView registered successfully")
         except Exception as e:
             self.mylogger.error(f"Failed to register PluginManagerView: {e}")
+
+    def _is_security_component_enabled(self, component_cls) -> bool:
+        """Return whether a built-in component may activate in the current security mode."""
+        security_mode = str(getattr(component_cls, 'security_mode', 'public') or 'public').lower()
+        if getattr(component_cls, 'provides_security', False):
+            return True
+        if security_mode == 'required' and not getattr(self, 'authorization_enabled', False):
+            return False
+        return True
 
     def register_routes(self):
         self.blueprint = Blueprint(
@@ -112,6 +129,8 @@ class FunlabFlask(_FlaskBase):
             if current_user.is_authenticated:
                 return redirect(url_for('root_bp.home'))
             else:
+                if not getattr(current_app, 'authorization_enabled', False):
+                    return redirect(url_for('root_bp.home'))
                 if not current_app.login_manager or not current_app.login_manager.login_view:  # 系統不做登入及權限管理
                     return redirect(url_for('root_bp.home'))
                 return redirect(url_for(current_app.login_manager.login_view))
@@ -121,19 +140,29 @@ class FunlabFlask(_FlaskBase):
             return render_template('blank.html')
 
         @self.blueprint.route('/home')
-        @login_required
         def home():
+            if getattr(current_app, 'authorization_enabled', False) and not current_user.is_authenticated:
+                return current_app.login_manager.unauthorized()
             home_entry:str=None
             if home_entry:=self.config.get("HOME_ENTRY", None):
                 if home_entry.endswith(('.html', '.htm',)):
                     return render_template(home_entry)
                 else:
-                    return redirect(url_for(home_entry))
+                    try:
+                        return redirect(url_for(home_entry))
+                    except BuildError:
+                        if not getattr(current_app, 'authorization_enabled', False):
+                            self.mylogger.info(
+                                "HOME_ENTRY '%s' is unavailable in public mode; falling back to blank page.",
+                                home_entry,
+                            )
+                            return render_template('blank.html')
+                        raise
             else:
                 return render_template('blank.html')
 
         @self.blueprint.route('/conf_data')
-        @admin_required
+        @policy_required(is_admin)
         def conf_data():
             return render_template('conf-data.html', app_conf=self.config, all_conf=self._config.as_dict())
 
@@ -188,7 +217,7 @@ class FunlabFlask(_FlaskBase):
         # is selected at request time via current_app.notification_provider.
 
         @self.blueprint.route('/notifications/poll')
-        @login_required
+        @policy_required(is_authenticated_user)
         def poll_notifications():
             """Return all undismissed notifications for the current user.
 
@@ -200,7 +229,7 @@ class FunlabFlask(_FlaskBase):
             return jsonify(items)
 
         @self.blueprint.route('/notifications/clear', methods=['POST'])
-        @login_required
+        @policy_required(is_authenticated_user)
         def clear_notifications():
             """Dismiss every notification for the current user (Clear All button)."""
             current_app.notification_provider.dismiss_all(current_user.id)
@@ -208,7 +237,7 @@ class FunlabFlask(_FlaskBase):
             return jsonify({"status": "ok"})
 
         @self.blueprint.route('/notifications/dismiss', methods=['POST'])
-        @login_required
+        @policy_required(is_authenticated_user)
         def dismiss_notifications():
             """Dismiss specific notifications by ID (individual ✕ button)."""
             from flask import request as req, jsonify
@@ -254,7 +283,7 @@ class FunlabFlask(_FlaskBase):
                         MenuDivider(),
                         MenuItem(title='Configuration',
                             icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-octagon-filled" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14.897 1a4 4 0 0 1 2.664 1.016l.165 .156l4.1 4.1a4 4 0 0 1 1.168 2.605l.006 .227v5.794a4 4 0 0 1 -1.016 2.664l-.156 .165l-4.1 4.1a4 4 0 0 1 -2.603 1.168l-.227 .006h-5.795a3.999 3.999 0 0 1 -2.664 -1.017l-.165 -.156l-4.1 -4.1a4 4 0 0 1 -1.168 -2.604l-.006 -.227v-5.794a4 4 0 0 1 1.016 -2.664l.156 -.165l4.1 -4.1a4 4 0 0 1 2.605 -1.168l.227 -.006h5.793zm-2.897 10h-1l-.117 .007a1 1 0 0 0 0 1.986l.117 .007v3l.007 .117a1 1 0 0 0 .876 .876l.117 .007h1l.117 -.007a1 1 0 0 0 .876 -.876l.007 -.117l-.007 -.117a1 1 0 0 0 -.764 -.857l-.112 -.02l-.117 -.006v-3l-.007 -.117a1 1 0 0 0 -.876 -.876l-.117 -.007zm.01 -3l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007z" stroke-width="0" fill="currentColor" /></svg>',
-                            href='/conf_data', admin_only=True),
+                            href='/conf_data', required_policy=is_admin),
                         MenuItem(title='about',
                             icon='<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-info-square-rounded" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>',
                             href='/about'),
