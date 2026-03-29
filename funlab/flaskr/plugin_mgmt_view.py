@@ -108,6 +108,14 @@ class PluginManagerView(Plugin):
                             'error': f'Plugin {plugin_name} not found'
                         }), 404
 
+                    # ensure application-level config is reloaded so plugin's
+                    # _init_configuration() will see updated `config.toml` values
+                    try:
+                        if hasattr(self.app, 'reload_config'):
+                            self.app.reload_config()
+                    except Exception:
+                        self.app.mylogger.warning('App config reload failed prior to plugin reload')
+
                     success = manager.reload_plugin(plugin_name)
                     current_state = manager.get_plugin_state(plugin_name)
                 else:
