@@ -17,7 +17,8 @@ flask-login = "^0.6.3"
 # waitress = "^2.1.2"  # WSGI service, add only when use it
 # gunicorn = "^21.2.0"  # WSGI service, add only when use it
 # gevent = "^23.9.1"  # add when add gunicorn
-funlab-libs = "^0.3.6"
+# funlab-libs = "^0.3.6"
+funlab-libs = {path = "../funlab-libs", develop = true}
 tzlocal = "^5.3.1"
 
 [build-system]
