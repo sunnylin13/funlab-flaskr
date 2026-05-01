@@ -42,13 +42,7 @@ class PluginManagerView(Plugin):
         def get_plugins():
             """Return plugin statistics."""
             try:
-                if hasattr(self.app, 'plugin_manager'):
-                    stats = self.app.plugin_manager.get_plugin_stats()
-                else:
-                    # Compatibility fallback for legacy plugin collection.
-                    stats = self._collect_legacy_plugin_stats()
-                    self.app.mylogger.debug(f"legacy stats: {stats}")
-
+                stats = self.app.plugin_manager.get_plugin_stats()
                 return jsonify({
                     'success': True,
                     'data': stats
@@ -279,15 +273,9 @@ class PluginManagerView(Plugin):
             # Gather plugin statistics for the dashboard.
             try:
                 self.app.mylogger.debug("Starting plugin_management route")
-                if hasattr(self.app, 'plugin_manager'):
-                    self.app.mylogger.debug("Using plugin_manager for stats")
-                    stats = self.app.plugin_manager.get_plugin_stats()
-                    self.app.mylogger.debug(f"plugin_manager stats: {stats}")
-                else:
-                    self.app.mylogger.debug("Using legacy stats collection")
-                    stats = self._collect_legacy_plugin_stats()
-                    self.app.mylogger.debug(f"legacy stats: {stats}")
-
+                self.app.mylogger.debug("Using plugin_manager for stats")
+                stats = self.app.plugin_manager.get_plugin_stats()
+                self.app.mylogger.debug(f"plugin_manager stats: {stats}")
                 # Format timestamps and refresh aggregate counters.
                 if 'plugins' in stats:
                     # Recompute aggregate counters.
@@ -337,25 +325,6 @@ class PluginManagerView(Plugin):
                 import traceback
                 self.app.mylogger.error(f"Traceback: {traceback.format_exc()}")
                 return f"Error: {e}", 500
-
-    def _collect_legacy_plugin_stats(self):
-        """Compatibility helper that gathers stats from the legacy plugin registry."""
-        plugins = {}
-        for name, plugin in self.app.plugins.items():
-            plugins[name] = {
-                'state': 'active',
-                'load_time': None,
-                'error_message': None,
-                'last_access': None
-            }
-
-        return {
-            'total_plugins': len(self.app.plugins),
-            'active_plugins': len(self.app.plugins),
-            'lazy_plugins': 0,
-            'error_plugins': 0,
-            'plugins': plugins
-        }
 
     def setup_menus(self):
         """Register the plugin-management menu entry."""
