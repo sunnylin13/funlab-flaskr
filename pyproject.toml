@@ -11,7 +11,7 @@ packages = [{include = "funlab"}]
 exclude = ["**/*.jpg", "**/*.png"]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.13"
 flask = "^3.0.0"
 flask-login = "^0.6.3"
 # waitress = "^2.1.2"  # WSGI service, add only when use it
