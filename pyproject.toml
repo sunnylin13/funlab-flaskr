@@ -1,29 +1,36 @@
-[tool.poetry]
+[project]
 name = "funlab-flaskr"
 version = "0.4.0"
-license = "MIT"
 description = "Funlab - A pluggable flask web application framework and adopt 'tabler' bootstrap UI template."
-authors = ["sunny <013.lin@gmail.com>"]
+authors = [{ name = "sunny", email = "013.lin@gmail.com" }]
 readme = "README.md"
-repository = "https://github.com/sunnylin13/funlab-flaskr"
-# documentation = "https://python-poetry.org/docs/"
-packages = [{include = "funlab"}]
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.0.0,<4",
+    "flask-login>=0.6.3,<0.7",
+    "tzlocal>=5.3.1,<6",
+    "funlab-libs",
+]
+
+[project.urls]
+Repository = "https://github.com/sunnylin13/funlab-flaskr"
+
+[dependency-groups]
+dev = ["pytest>=8.3.0,<10"]
+
+# Cross-repo dependencies resolve via the workspace root's [tool.uv.sources];
+# member-level sources are intentionally omitted (each repo is its own git root,
+# so `workspace = true` here would bind to this repo, not the outer workspace).
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# PEP 420 namespace package (shared 'funlab' namespace; exclude static assets
+# per former poetry `exclude` rule).
+packages = ["funlab"]
 exclude = ["**/*.jpg", "**/*.png"]
 
-[tool.poetry.dependencies]
-python = "^3.13"
-flask = "^3.0.0"
-flask-login = "^0.6.3"
-# waitress = "^2.1.2"  # WSGI service, add only when use it
-# gunicorn = "^21.2.0"  # WSGI service, add only when use it
-# gevent = "^23.9.1"  # add when add gunicorn
-# funlab-libs = "^0.3.6"
-funlab-libs = {path = "../funlab-libs", develop = true}
-tzlocal = "^5.3.1"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-# [tool.poetry.plugins."funlab_plugin"]
+# [project.entry-points."funlab_plugin"]
 # HookTestView = "funlab.flaskr.hook_test_plugin:HookTestView"
