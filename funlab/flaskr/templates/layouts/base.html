@@ -13,6 +13,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <!-- CSRF token for JS fetch/XHR submitters (ADR-016 D2-c);
+       consumed by static/js/csrf_ajax.js which attaches X-CSRFToken header. -->
+  <meta name="csrf-token" content="{{ csrf_token() }}" />
+  <script src="/static/js/csrf_ajax.js" defer></script>
   <title>{{ config.TITLE}}</title>
   <!-- Favicon -->
   <link rel="apple-touch-icon" sizes="120x120" href="/static/favicon/home-stats.svg">
