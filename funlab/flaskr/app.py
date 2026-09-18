@@ -22,12 +22,70 @@ class FunlabFlask(_FlaskBase):
         import logging
         mylogger = log.get_logger(self.__class__.__name__, level=logging.INFO)
         mylogger.progress("Creating FunlabFlask ...", key='funlabflask')
+
+        # --- CSRF (ADR-016 D2) ------------------------------------------
+        # Create the CSRFProtect instance BEFORE plugin registration so
+        # plugins can declare exemptions at construction time, e.g.::
+        #
+        #     flask_restx.Api(blueprint, decorators=[app.csrf.exempt])
+        #
+        # Enforcement is only wired in *after* plugin registration
+        # completes (``self.csrf.init_app(self)`` below), matching the ADR
+        # timing "plugin 註冊完成後 CSRFProtect(app)".  Exemptions are
+        # allowed on flask-restx read-only api namespaces only; notifications
+        # and plugin-management JSON POSTs are covered by the shared
+        # X-CSRFToken bootstrap JS (statics/js/csrf_ajax.js + meta tag in
+        # layouts/base*.html), not exempted.
+        from flask_wtf import CSRFProtect
+        from flask_wtf.csrf import CSRFError
+        self.csrf = CSRFProtect()
+
         super().__init__(configfile=configfile, envfile=envfile, *args, **kwargs)
         self.app:FunlabFlask
 
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
+
+        # Wire global CSRF protection now that (and only now that) all
+        # plugins have had their chance to register exemptions.
+        self._init_csrf_protection(CSRFError)
         mylogger.end_progress("FunlabFlask created.", key='funlabflask')
+
+    def _init_csrf_protection(self, csrf_error_cls) -> None:
+        """Activate global CSRFProtect and its error surface (ADR-016 D2).
+
+        - ``CSRFProtect.init_app`` intercepts every POST/PUT/PATCH/DELETE at
+          request-dispatch time (fail-closed default for future routes).
+        - A dedicated ``CSRFError`` handler is required: ``_FlaskBase``
+          registers a catch-all ``errorhandler(Exception)`` that would
+          otherwise swallow the 400 CSRF rejection and surface it as a 500.
+        - Hard deployment condition (ADR-016 D2 / risk R3): a randomly
+          generated SECRET_KEY makes tokens invalid across restarts /
+          workers; warn loudly at startup so operators pin it.
+        """
+        self.csrf.init_app(self)
+
+        @self.errorhandler(csrf_error_cls)
+        def csrf_validation_error(error):
+            # 400 is the canonical CSRF rejection status.  Keep it a 400
+            # (never let the generic Exception handler turn it into a 500).
+            description = getattr(error, 'description', None) or str(error)
+            from flask import jsonify, request as req
+            if req.is_json:
+                return jsonify(error='CSRF validation failed',
+                               detail=description), 400
+            return ('CSRF validation failed. Please reload the page and '
+                    'submit again.'), 400
+
+        if getattr(self, 'secret_key_is_random', False):
+            self.mylogger.warning(
+                "CSRF is enabled but SECRET_KEY was NOT pinned in config; a "
+                "random key is in use.  All POST/PUT/PATCH/DELETE requests "
+                "will fail after restart or across workers.  Pin "
+                "SECRET_KEY in the deployment config before serving traffic "
+                "(ADR-016 D2).")
+        else:
+            self.mylogger.info("Global CSRF protection enabled (flask-wtf CSRFProtect).")
 
     def get_user_data_storage_path(self, username:str)->Path:
         data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))

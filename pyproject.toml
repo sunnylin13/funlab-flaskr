@@ -9,6 +9,10 @@ requires-python = ">=3.12"
 dependencies = [
     "flask>=3.0.0,<4",
     "flask-login>=0.6.3,<0.7",
+    # ADR-016 D2: global CSRFProtect is wired in FunlabFlask; previously
+    # flask-wtf was only a transitive dependency via funlab-auth — declare it
+    # formally because funlab-flaskr code imports it directly.
+    "flask-wtf>=1.2.0,<2",
     "tzlocal>=5.3.1,<6",
     "funlab-libs",
 ]
