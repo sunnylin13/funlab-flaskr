@@ -88,7 +88,8 @@ class FunlabFlask(_FlaskBase):
             self.mylogger.info("Global CSRF protection enabled (flask-wtf CSRFProtect).")
 
     def get_user_data_storage_path(self, username:str)->Path:
-        data_path =  Path(self.static_folder).joinpath('_users').joinpath(username.lower().replace(' ', ''))
+        # 使用者私有資料（含券商憑證）絕不可位於任何 static 路由之下
+        data_path =  Path(self.root_path).joinpath('_users').joinpath(username.lower().replace(' ', ''))
         data_path.mkdir(parents=True, exist_ok=True)
         return data_path
 
@@ -351,7 +352,9 @@ class FunlabFlask(_FlaskBase):
                         ])
 
 def create_app(configfile, envfile:str=None):
-    app = FunlabFlask(configfile=configfile, envfile=envfile, import_name=__name__, template_folder="", static_folder="")
+    # static_folder=None：不註冊 app 級 static 路由。舊值 "" 會把套件根目錄以
+    # URL "/" 公開（含 _users/ 憑證、conf/、*.py）。前端資源由 root_bp 的 /static 提供。
+    app = FunlabFlask(configfile=configfile, envfile=envfile, import_name=__name__, template_folder="", static_folder=None)
     if envfile:
         vars2env.encode_envfile_vars(envfile, key_name=app.config['SECRET_KEY'])
     return app
