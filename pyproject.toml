@@ -22,6 +22,7 @@ Repository = "https://github.com/sunnylin13/funlab-flaskr"
 
 [dependency-groups]
 dev = ["pytest>=8.3.0,<10"]
+gunicorn = ["gunicorn>=22.0,<24", "gevent>=24.2"]
 
 [tool.uv.sources]
 funlab-libs = { workspace = true }

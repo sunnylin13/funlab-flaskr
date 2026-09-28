@@ -54,9 +54,12 @@ def _write_config(tmp_path, name: str, content: str) -> str:
 
 def _make_app(configfile: str, import_name: str):
     from funlab.flaskr.app import FunlabFlask
+    # FLK-09: 必須與 create_app() 一致用 static_folder=None。
+    # 舊值 '' 會讓 Flask 把套件根目錄掛成 app 級 /<path:filename> 路由，
+    # 測試 app 因此可匿名下載 _users/、conf/、*.py（H1 破口在測試裡復活）。
     app = FunlabFlask(configfile=configfile, envfile=None,
                       import_name=import_name,
-                      template_folder='', static_folder='')
+                      template_folder='', static_folder=None)
     # The unit-test app has no database (config carries no [DATABASE] to keep
     # the test self-contained).  funlab-auth's request_loader queries the
     # user table on *every* request and would 500 before the CSRF before-hook
