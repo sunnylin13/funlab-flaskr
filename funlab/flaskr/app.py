@@ -2,6 +2,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
+import sys
 from werkzeug.routing import BuildError
 
 from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app)
@@ -492,9 +493,8 @@ def start_server(app:Flask):
 
 def main(args=None):
     from funlab.utils import log
-    import logging
     mylogger = log.get_logger(__name__, level=logging.INFO)
-    if not args:
+    if args is None:
         args = sys.argv[1:]
     parser = argparse.ArgumentParser(description="Programing by 013 ...")
     parser.add_argument("-c", "--configfile", dest="configfile", default='config.toml', help="specify config.toml name and path")
@@ -506,6 +506,5 @@ def main(args=None):
     start_server(create_app(configfile=configfile, envfile=envfile))
     mylogger.end_progress(f"progress state:{mylogger._progress_states}", key='main_webserver')
 
-import sys
 if __name__ == "__main__":
     sys.exit(main())
