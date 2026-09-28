@@ -1,8 +1,7 @@
 from __future__ import annotations
 import argparse
-from http.client import HTTPException
+import logging
 from pathlib import Path
-import traceback
 from werkzeug.routing import BuildError
 
 from flask import (Blueprint, Flask, redirect, render_template, url_for, current_app)
@@ -309,7 +308,12 @@ class FunlabFlask(_FlaskBase):
         # Allow provider to register its own provider-specific routes (e.g. /sse/*, /ssetest)
         self.notification_provider.register_routes(self.blueprint)
 
-        # Error handlers and blueprint registration always run regardless of provider.
+        # Error handlers. 未捕捉例外的統一處理在 funlab-libs 的
+        # _FlaskBase.register_request_handler:handle_error（含
+        # controller_error_handler hook 與 JSON 錯誤回應）；flaskr 只補
+        # 特定狀態碼的頁面。這裡不可再註冊 @self.errorhandler(Exception)：
+        # register_request_handler() 在本方法之後執行，後註冊者會覆蓋前者，
+        # flaskr 端重複註冊只會產生死碼。
         @self.errorhandler(403)
         def access_deny_error(error):
             return render_template('error-403.html', msg=str(error)), 403
@@ -321,15 +325,6 @@ class FunlabFlask(_FlaskBase):
         @self.errorhandler(500)
         def internal_error(error):
             return render_template('error-500.html', msg=str(error)), 500
-
-        @self.errorhandler(Exception)
-        def handle_unexpected_error(error):
-            if isinstance(error, HTTPException):
-                return error
-            trace_info = traceback.format_exception(error)
-            trace_info = ''.join(trace_info)
-            traceback.print_exception(error)
-            return render_template('error-500.html', msg=str(error), trace_info=trace_info), 500
 
         # Need to call flask's register_blueprint for all route, after route defined
         self.register_blueprint(self.blueprint)
@@ -414,7 +409,6 @@ def start_server(app:Flask):
         app.mylogger.info(f"Start Gunicorn server at {host}:{port}")
         GunicornApplication(app, kwargs).run()
     else:  # development, use flask embeded server
-        import logging
         log_file = './funlab.log'
         handler = logging.FileHandler(log_file)
         handler.setLevel(logging.DEBUG)
