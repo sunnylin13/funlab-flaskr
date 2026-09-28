@@ -33,4 +33,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["funlab"]
-exclude = ["**/*.jpg", "**/*.png"]
+exclude = [
+    "**/*.map",
+    "funlab/flaskr/static/dist/libs/**/dist/**/*.map",
+    "**/*.md",
+]
