@@ -34,10 +34,7 @@
             We are sorry but our server encountered an internal error
           </p>
           {% if msg %}
-          <p>Reason: <span class="text-danger">{{ msg | safe }}</span></p>
-          {% endif %}
-          {% if msg %}
-          <p>Exception trace:<br> <span class="text-danger"><pre class="text-start">{{ trace_info}}</pre></span></p>
+          <p>Reason: <span class="text-danger">{{ msg }}</span></p>
           {% endif %}
           <div class="empty-action">
             <a href="./." class="btn btn-primary">

@@ -33,11 +33,9 @@
       <p class="empty-subtitle text-muted">
         Please contact support for authenticate
       </p>
-      <p>
-        {% if msg %}
-        Reason: <span class="text-danger">{{ msg | safe }}</span>
-        {% endif %}
-      </p>
+      {% if msg %}
+      <p class="empty-subtitle text-muted">Reason: <span class="text-danger">{{ msg }}</span></p>
+      {% endif %}
       <div class="empty-action">
         {% if msg=='No Login manager plugin is installled.' %}
         <a href="/tablerdemo" class="btn btn-outline">
