@@ -16,6 +16,30 @@ from funlab.core.policy import is_admin, is_authenticated_user
 from funlab.utils import vars2env
 from funlab.flaskr.plugin_mgmt_view import PluginManagerView
 
+import re
+
+# 機密欄位名稱偵測（FLK-03）：渲染設定頁前先遮罩。
+# 注意用「包含」而非「等於」：SECRET_KEY / XXX_PASSWORD / DB_TOKEN 都要命中；
+# 刻意不含裸 'KEY' 以外的一般詞，避免把 HOME_ENTRY 等一般鍵誤遮。
+# SECRET_KEY 同時是 vars2env 的 env 檔加解密主金鑰（ADR-016 D2/R3），必須遮罩。
+_SENSITIVE_KEY_RE = re.compile(
+    r'(SECRET|PASSWORD|PASSWD|PASSPHRASE|TOKEN|APIKEY|API_KEY|ACCESS_KEY|'
+    r'PRIVATE_KEY|CREDENTIAL|CERT_PASS|KEYSTORE)', re.IGNORECASE)
+
+
+def _mask_sensitive(mapping):
+    """遞迴遮罩 dict 中機密鍵的值（不回傳原 dict）。"""
+    masked = {}
+    for key, value in dict(mapping).items():
+        if isinstance(value, dict):
+            masked[key] = _mask_sensitive(value)
+        elif _SENSITIVE_KEY_RE.search(str(key)):
+            masked[key] = '***masked***'
+        else:
+            masked[key] = value
+    return masked
+
+
 class FunlabFlask(_FlaskBase):
     def __init__(self, configfile:str, envfile:str, *args, **kwargs):
         from funlab.utils import log
@@ -49,6 +73,8 @@ class FunlabFlask(_FlaskBase):
         # Wire global CSRF protection now that (and only now that) all
         # plugins have had their chance to register exemptions.
         self._init_csrf_protection(CSRFError)
+        # FLK-06: 基本安全標頭（不依賴 CSRF 設定，獨立常駐）
+        self._init_security_headers()
         mylogger.end_progress("FunlabFlask created.", key='funlabflask')
 
     def _init_csrf_protection(self, csrf_error_cls) -> None:
@@ -86,6 +112,34 @@ class FunlabFlask(_FlaskBase):
                 "(ADR-016 D2).")
         else:
             self.mylogger.info("Global CSRF protection enabled (flask-wtf CSRFProtect).")
+
+    def _init_security_headers(self) -> None:
+        """FLK-06: 為所有回應掛上基本安全標頭。
+
+        - X-Frame-Options: SAMEORIGIN — 防 clickjacking。模板目前無
+          iframe 自我嵌入需求；如日後有特定頁面允許嵌入，用
+          config['X_FRAME_OPTIONS_ALLOW'] 逐頁放行的後續案再議。
+        - X-Content-Type-Options: nosniff
+        - Referrer-Policy: same-origin
+        - Content-Security-Policy：預設**不發**（模板含大量 inline script
+          與 rsms.me 字體 CDN，強制 CSP 需先整理模板）。部署者可設
+          config['CSP_HEADER']（整條 CSP 字串）或保守的
+          config['CSP_REPORT_ONLY']（僅報告不封鎖）啟用。
+        """
+        @self.after_request
+        def _add_security_headers(response):
+            response.headers.setdefault('X-Frame-Options',
+                                        self.config.get('X_FRAME_OPTIONS', 'SAMEORIGIN'))
+            response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+            response.headers.setdefault('Referrer-Policy',
+                                        self.config.get('REFERRER_POLICY', 'same-origin'))
+            csp = self.config.get('CSP_HEADER')
+            if csp:
+                response.headers['Content-Security-Policy'] = csp
+            csp_ro = self.config.get('CSP_REPORT_ONLY')
+            if csp_ro:
+                response.headers['Content-Security-Policy-Report-Only'] = csp_ro
+            return response
 
     def get_user_data_storage_path(self, username:str)->Path:
         # 使用者私有資料（含券商憑證）絕不可位於任何 static 路由之下
@@ -223,7 +277,10 @@ class FunlabFlask(_FlaskBase):
         @self.blueprint.route('/conf_data')
         @policy_required(is_admin)
         def conf_data():
-            return render_template('conf-data.html', app_conf=self.config, all_conf=self._config.as_dict())
+            # FLK-03: 設定頁絕不輸出金鑰/密碼值；遞迴遮罩後再渲染。
+            return render_template('conf-data.html',
+                                   app_conf=_mask_sensitive(self.config),
+                                   all_conf=_mask_sensitive(self._config.as_dict()))
 
         @self.blueprint.route('/about')
         def about():
@@ -238,7 +295,16 @@ class FunlabFlask(_FlaskBase):
 
         @self.blueprint.route('/health')
         def health():
-            from flask import jsonify
+            """健康檢查。
+
+            明細（plugins/prewarm 逐項狀態）只在以下條件回傳：
+            - 來源為回環位址（127.0.0.1/::1，本机 curl 驗收流程沿用），或
+            - HEALTH_DETAIL='admin' 且當前使用者為 admin，或
+            - HEALTH_DETAIL='open'（明確選擇公開發布）。
+            其餘情況只回 {'status': 'ok'|'degraded'}。
+            HEALTH_DETAIL 預設 'local'。
+            """
+            from flask import jsonify, request as req
             import funlab.core.prewarm as prewarm
 
             plugin_health = {}
@@ -262,11 +328,20 @@ class FunlabFlask(_FlaskBase):
             has_prewarm_pending = any(v.get('status') == 'pending' for v in prewarm_status.values())
             system_ok = all_plugins_healthy and not has_prewarm_pending
 
-            return jsonify({
-                'status': 'ok' if system_ok else 'degraded',
-                'plugins': plugin_health,
-                'prewarm': prewarm_status,
-            }), (200 if system_ok else 503)
+            mode = str(self.config.get('HEALTH_DETAIL', 'local')).lower()
+            loopback = req.remote_addr in ('127.0.0.1', '::1')
+            admin = bool(getattr(current_user, 'is_authenticated', False)) and is_admin(current_user)
+            show_detail = (mode == 'open') or loopback or (mode == 'admin' and admin)
+
+            if show_detail:
+                payload = {
+                    'status': 'ok' if system_ok else 'degraded',
+                    'plugins': plugin_health,
+                    'prewarm': prewarm_status,
+                }
+            else:
+                payload = {'status': 'ok' if system_ok else 'degraded'}
+            return jsonify(payload), (200 if system_ok else 503)
 
         # ------------------------------------------------------------------
         # Notification routes: dispatch through current_app.notification_provider
