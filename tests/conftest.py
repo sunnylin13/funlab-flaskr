@@ -46,6 +46,24 @@ CACHE_TYPE = 'SimpleCache'
 """
 
 
+@pytest.fixture(autouse=True)
+def _isolate_prewarm_state():
+    """隔離 prewarm 模組級全域狀態（PREWARM.md §5：`_entries` 跨 app 互污）。
+
+    FunlabFlask 建構時各 plugin 於註冊階段就 register_prewarm（pending），
+    而測試 app 設 PREWARM_ENABLED=false，run() 從不執行清空殭屍 pending，
+    會把同 process 內後續任何 app 的 /health 打到 degraded/503（跨 app
+    汙染，非 health() 判定錯——PW-4 已定稿：非 late pending 計入 degraded
+    是正確行為，修的是測試隔離）。每測試前後 reset()。late/degraded 語意
+    測試（test_health_late_pending）以 monkeypatch 直接注入 status()，
+    不受本 fixture 影響。
+    """
+    import funlab.core.prewarm as prewarm
+    prewarm.reset()
+    yield
+    prewarm.reset()
+
+
 def _write_config(tmp_path, name: str, content: str) -> str:
     cfg = tmp_path / name
     cfg.write_text(content, encoding='utf-8')
