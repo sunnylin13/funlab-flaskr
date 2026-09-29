@@ -303,6 +303,10 @@ class FunlabFlask(_FlaskBase):
             - HEALTH_DETAIL='open'（明確選擇公開發布）。
             其餘情況只回 {'status': 'ok'|'degraded'}。
             HEALTH_DETAIL 預設 'local'。
+
+            late（run() 後註冊、永不執行）的 pending 不計入 degraded：
+            late 殭屍任務永遠不會被執行清空，否則會把 /health 永久打到
+            degraded/503。
             """
             from flask import jsonify, request as req
             import funlab.core.prewarm as prewarm
@@ -325,7 +329,10 @@ class FunlabFlask(_FlaskBase):
 
             prewarm_status = prewarm.status()
             all_plugins_healthy = all(v.get('healthy', False) for v in plugin_health.values()) if plugin_health else True
-            has_prewarm_pending = any(v.get('status') == 'pending' for v in prewarm_status.values())
+            # late=True（run() 之後註冊、永不執行）的 pending 不計入 degraded：
+            # 否則 late 殭屍任務會讓 /health 永久停在 degraded/503。
+            has_prewarm_pending = any(v.get('status') == 'pending' and not v.get('late')
+                                      for v in prewarm_status.values())
             system_ok = all_plugins_healthy and not has_prewarm_pending
 
             mode = str(self.config.get('HEALTH_DETAIL', 'local')).lower()
