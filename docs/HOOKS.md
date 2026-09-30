@@ -58,8 +58,9 @@ context：`app`、`request`、`current_user`（請求情境）。
 
 | Hook | 觸發點 |
 |---|---|
-| `plugin_after_init` | `Plugin.__init__` 尾（每個 plugin 構造完成）；SchedService/QuoteService 用它做「等其他 plugin 初始化完再啟動載入」的同步點 |
-| ~~`plugin_service_init`~~ | **已移除**（2026-09-30，零生產消費，kanban t_c0ecb5c5；`ServicePlugin.__init__` 不再觸發，改監聽 `plugin_after_init`） |
+| `plugin_after_init` | `Plugin.__init__` 尾（每個 plugin 構造完成）；~~SchedService/QuoteService 用它做同步點~~（R10 已改監聽 `plugins_registration_complete`） |
+| `plugins_registration_complete` | **框架內建、恰觸發一次**：funlab-flaskr `FunlabFlask.__init__` 在 `_register_plugin_manager_view()` 成功後廣播（R10，kanban t_e56e99f5）。context 帶 `app`。「等全部 plugin 註冊完成」的正式訊號——生產消費端：SchedService（任務 loader）、QuoteService（Pool 初始化） |
+| ~~`plugin_service_init`~~ | **已移除**（2026-09-30，零生產消費，kanban t_c0ecb5c5；`ServicePlugin.__init__` 不再觸發） |
 | `plugin_before_start` / `plugin_after_start` | `Plugin.start()` |
 | `plugin_before_stop` / `plugin_after_stop` | `Plugin.stop()` |
 | `plugin_before_reload` / `plugin_after_reload` | `Plugin.reload()` |
@@ -86,7 +87,7 @@ context：`app`、`request`、`current_user`（請求情境）。
 
 ## 3. 註冊時機與慣例
 
-- 在 plugin `__init__`（或 view 的 `_register_hook_examples` 慣例方法）註冊；`plugin_after_init` 可用於「等依賴 plugin 出現」的場合——慣例做法是檢查 `context['plugin_name']` 是否為目標 plugin 名（如 quotesvcs 等 `"pluginmanager"`/`"PluginManagerView"`）。
+- 在 plugin `__init__`（或 view 的 `_register_hook_examples` 慣例方法）註冊；「等全部 plugin 註冊完成再啟動 X」請監聽框架內建一次性 hook `plugins_registration_complete`（R10）——不要再檢查 `context['plugin_name']` 是否為 `"pluginmanager"`/`"PluginManagerView"`（舊脆弱握手已廢除，public 模式下根本不會觸發）。
 - priority：慣例 1（最早）/ 5-10（系統性）/ 50（一般功能）/ 100（預設，最晚）。SchedService 用 5 搶先啟動。
 - View hook 每次渲染都跑：**不要在 hook 內做 DB 查詢或重計算**。
 - 回呼簽名固定 `(context: dict)`；以唯讀方式使用 context。

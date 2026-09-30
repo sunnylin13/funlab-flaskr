@@ -70,6 +70,14 @@ class FunlabFlask(_FlaskBase):
         # ✅ 註冊內建的 PluginManagerView
         self._register_plugin_manager_view()
 
+        # R10（kanban t_e56e99f5）：全部 plugin 註冊完成 → 明確廣播一次全域
+        # hook ``plugins_registration_complete``（context 由 HookManager 自動
+        # 帶 app）。消費端（SchedService／QuoteService）監聽此 hook 取代過去
+        # 對 plugin_after_init 的 plugin_name 字串匹配脆弱握手。觸發點在
+        # PluginManagerView（最後一個被構造的 plugin）之後，故語意為「全部
+        # plugin_after_init 均已發生」，且每個 app 恰觸發一次。
+        self.hook_manager.call_hook('plugins_registration_complete')
+
         # Wire global CSRF protection now that (and only now that) all
         # plugins have had their chance to register exemptions.
         self._init_csrf_protection(CSRFError)
