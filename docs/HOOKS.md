@@ -59,7 +59,7 @@ context：`app`、`request`、`current_user`（請求情境）。
 | Hook | 觸發點 |
 |---|---|
 | `plugin_after_init` | `Plugin.__init__` 尾（每個 plugin 構造完成）；SchedService/QuoteService 用它做「等其他 plugin 初始化完再啟動載入」的同步點 |
-| `plugin_service_init` | `ServicePlugin.__init__` |
+| ~~`plugin_service_init`~~ | **已移除**（2026-09-30，零生產消費，kanban t_c0ecb5c5；`ServicePlugin.__init__` 不再觸發，改監聽 `plugin_after_init`） |
 | `plugin_before_start` / `plugin_after_start` | `Plugin.start()` |
 | `plugin_before_stop` / `plugin_after_stop` | `Plugin.stop()` |
 | `plugin_before_reload` / `plugin_after_reload` | `Plugin.reload()` |

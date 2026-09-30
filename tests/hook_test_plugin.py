@@ -58,12 +58,9 @@ class HookTestView(Plugin):
             priority=10,
             plugin_name=self.name,
         )
-        self.app.hook_manager.register_hook(
-            "plugin_service_init",
-            self._log_plugin_init,
-            priority=10,
-            plugin_name=self.name,
-        )
+        # plugin_service_init registration removed (kanban t_c0ecb5c5):
+        # the hook itself was deleted from funlab-libs ServicePlugin.__init__
+        # (zero production consumers, 2026-09-30 user ruling).
 
         # Plugin Lifecycle Hooks - Start/Stop
         self.app.hook_manager.register_hook(
