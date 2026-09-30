@@ -131,7 +131,7 @@ def test_no_http_client_import_in_app_module():
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_error_handler_single.py -v
 # 預期：2 passed（修 code 前 test_no_http_client_import_in_app_module 與 JSON 斷言失敗：
 # 目前 JSON 500 也由 appbase 產生，故主要靠 src 斷言把關；handler 覆蓋順序改動後
@@ -245,7 +245,7 @@ def test_nonloopback_body_has_no_plugin_names(client):
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_health_detail_gating.py -v
 # 預期：3 passed（修正前 nonloopback 雨條失敗：回鍵含 plugins/prewarm）
 ```
@@ -351,7 +351,7 @@ def test_config_mapping_supported():
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_confdata_masking.py -v
 # 預期：3 passed（修正前 ImportError: cannot import name '_mask_sensitive'）
 ```
@@ -544,7 +544,7 @@ def test_flask_branch_filehandler_usable(csrf_app):
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_start_server_gunicorn.py -v
 # 預期：2 passed（修正前 test_gunicorn_branch_no_nameerror 失敗於 NameError）
 ```
@@ -666,7 +666,7 @@ def test_conf_init_exports_no_server_settings():
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_module_hygiene.py -v
 # 預期：3 passed（修正前第 1、2 條 FAIL；第 3 條 FAIL 於 conf/__init__ 帶出 threads 等）
 python -c "import funlab.flaskr.conf as c; assert not hasattr(c,'threads')"
@@ -759,7 +759,7 @@ def test_csp_not_sent_by_default(client):
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_security_headers.py -v
 # 預期：2 passed（修正前 KeyError: 'X-Frame-Options'）
 ```
@@ -821,7 +821,7 @@ def test_package_no_longer_ships_hook_test_plugin():
 ### (f) 驗證指令與預期輸出
 ```bash
 cd ~/workspaces/fund13/funlab-flaskr && git mv funlab/flaskr/hook_test_plugin.py tests/hook_test_plugin.py
-source ~/.venv/fund13/bin/activate && pytest tests/test_hook_test_plugin_usable.py -v
+source ~/workspaces/fund13/.venv/bin/activate && pytest tests/test_hook_test_plugin_usable.py -v
 # 預期：2 passed
 python -c "import funlab.flaskr.hook_test_plugin" 2>&1 | grep ModuleNotFoundError
 # 預期：ModuleNotFoundError（正式套件不再包含該模組）
@@ -896,7 +896,7 @@ def test_removed_asset_dirs_stay_gone():
 cd ~/workspaces/fund13/funlab-flaskr
 # 刪除前先跑一次引用守衛（應 FAIL 在存在的目錄），刪除後：
 du -sh funlab/flaskr/static        # 預期 ≈ 60M（dist+必要資源）
-source ~/.venv/fund13/bin/activate && pytest tests/test_no_orphan_asset_dirs.py -v   # 9 項通過
+source ~/workspaces/fund13/.venv/bin/activate && pytest tests/test_no_orphan_asset_dirs.py -v   # 9 項通過
 # 人工巡檢：啟動 dev app（WSGI=flask，本機 5999）開 /blank /conf_data /about 與
 # finfun 首頁，確認無 404 圖損（用瀏覽器 DevTools Network 過濾 404）。
 ```
@@ -1005,7 +1005,7 @@ def test_create_app_uses_static_none():
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_static_regression.py -v
 # 預期：4 passed（修 conftest 前：test_sensitive_paths_404... FAIL 於 /app.py==200）
 pytest tests/ -q
@@ -1091,7 +1091,7 @@ def test_no_safe_filter_in_error_templates():
 
 ### (f) 驗證指令與預期輸出
 ```bash
-cd ~/workspaces/fund13/funlab-flaskr && source ~/.venv/fund13/bin/activate
+cd ~/workspaces/fund13/funlab-flaskr && source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/test_error_templates_escape.py -v
 # 預期：2 passed（修正前第 1 條 FAIL：raw <script> 出現在回應）
 ```

@@ -51,7 +51,7 @@ HOST 規則：`HOST` 未設時 waitress/gunicorn 都預設 **0.0.0.0**（全部�
 
 ```bash
 cd ~/workspaces/fund13/funlab-flaskr
-source ~/.venv/fund13/bin/activate
+source ~/workspaces/fund13/.venv/bin/activate
 pytest tests/ -q                 # 基準：18 passed（2026-09-27）
 python run.py -c funlab/flaskr/conf/config.toml   # 用套件範例 config（ENV.TEST: waitress :5001）
 ```
