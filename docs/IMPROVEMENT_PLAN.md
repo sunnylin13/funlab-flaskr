@@ -553,6 +553,8 @@ pytest tests/test_start_server_gunicorn.py -v
 - 風險：無行為變更（waitress/flask 分支逐行保持）。若日後要真的啟用 gunicorn，另行評估 `conf/gunicorn_conf.py` 的 `workers = cpu_count()*2+1`（本機 20 核 → 41 個 gevent worker，對單人系統過量；SSE 長連線會各 worker 佔一組記憶體與 APScheduler——**多 worker 與程序內排程/SSE 狀態不相容**，啟用前必須先由 dev-arch 設計黏滞/單 worker 策略）。
 - 禁止：本 PR 不可改 `conf/gunicorn_conf.py` 的 workers 數（屬 FLK-04b，待裁示）；不可把 gunicorn 加進主 dependencies（拖垮 waitress 部署）；不可在本機改 `finfun/config.toml` 的 WSGI 值重啟服務。
 
+【定案 2026-10-09 Q6】路線續用 waitress；gunicorn 分支不實施、明載不支援；L554 的 FLK-04b workers 待裁示一併結案（不適用）。
+
 ---
 
 ## FLK-05（P2）程式衛生：`import sys` 尾置、conf/__init__ 副本、`if not args`
