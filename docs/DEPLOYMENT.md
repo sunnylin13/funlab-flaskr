@@ -18,7 +18,7 @@ systemd user unit: fund13-web.service
 | `WSGI=` | 伺服器 | 參數來源 | 現況 |
 |---|---|---|---|
 | `waitress` | `waitress.serve` | `conf/waitress_conf.py`（threads=cpu*2+1、backlog、channel_timeout=60、connection_limit=1000…）＋ config 的 HOST/PORT 覆蓋 | **正式機採用**（fund13-web.service，埠 5000） |
-| `gunicorn` | 行程內 `WSGIApplication` 子類 | `conf/gunicorn_conf.py`（workers=cpu*2+1、worker_class=gevent、timeout=30…）＋ `bind=HOST:PORT` | **目前不可用**：`logging` 未匯入 → NameError（IMPROVEMENT_PLAN FLK-04）；且 venv 未裝 gunicorn。修復前勿設定 |
+| `gunicorn` | 行程內 `WSGIApplication` 子類 | `conf/gunicorn_conf.py`（workers=cpu*2+1、worker_class=gevent、timeout=30…）＋ `bind=HOST:PORT` | **正式路線定案 waitress-only**（Q6 裁示 2026-10-09，KB ArchView §6）：NameError 已修（B2/PR#4）、gunicorn 已進 pyproject optional 群組，但 gunicorn 分支**維持明載不支援**，勿於正式機設定。啟用前提＝dev-arch 先出「排程/SSE 狀態外置」設計（見下節） |
 | `flask`（預設） | Flask 內建 dev server | `app.run(port=PORT, use_reloader=False)`，log 寫 CWD 的 `./funlab.log` | 僅開發 |
 
 HOST 規則：`HOST` 未設時 waitress/gunicorn 都預設 **0.0.0.0**（全部介面）。要限本機請在 config 的 `[ENV.X]` 設 `HOST='127.0.0.1'`，或在防火層擋外網。
