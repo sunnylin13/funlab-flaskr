@@ -9,7 +9,7 @@
 | [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) | 模板/靜態資源現況結構、Tabler 版本事實、主題切換機制、選單渲染與診斷要點 |
 | [HOOKS.md](HOOKS.md) | Hook 系統唯一事實來源：API、實際存在的 hook 名稱與 context、用法 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | 三種 WSGI 模式、bind/HOST 規則、static 與使用者資料目錄、安全要點 |
-| [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) | 待修項目 FLK-01…FLK-11（含完整修正程式碼、測試、驗證指令） |
+| KB `specs/migrations/funlab-flaskr-IMPROVEMENT_PLAN.md` | 待修項目 FLK-01…FLK-11（含完整修正程式碼、測試、驗證指令；2026-10-10 遷 KB） | fund13-dev-coder（實作者） |
 
 ## 快速事實（以原始碼為準，2026-09-27 核實）
 
